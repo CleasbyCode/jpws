@@ -87,7 +87,7 @@ int jpws(const std::string& IMAGE_FILENAME, const std::string& POWERSHELL_FILENA
 
 		while(comment_block_pos != image_vec.size()) {
 			image_vec.clear();
-			image_vec = image_vec_copy; // Use the fresh copy.
+			image_vec = image_vec_copy; 
 
 			--decrease_attempts;
 			++decrease_dims_val;
@@ -111,7 +111,7 @@ int jpws(const std::string& IMAGE_FILENAME, const std::string& POWERSHELL_FILENA
 	std::vector<uint8_t> 
 		comment_block_string_vec,
 		default_vec 	{ 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x23, 0x3E, 0x0D, 0x23, 0x9e },
-		alt_vec		{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; // If the default string fails to be preserved, try this one (-alt option).
+		alt_vec		{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; 
 
 	if (lastBlockString == ArgOption::Alt) {
 		comment_block_string_vec = alt_vec;
@@ -146,14 +146,12 @@ int jpws(const std::string& IMAGE_FILENAME, const std::string& POWERSHELL_FILENA
 
 	image_vec.insert(image_vec.begin() + JIFF_SIG_LENGTH , profile_vec.begin(), profile_vec.end());
 
-	// Update the two byte segment size for the color profile (FFE2xx).
 	while (bits) {
 		image_vec[segment_size_field_index++] = (SEGMENT_SIZE >> (bits -= 8)) & 0xFF;
 	}
 
 	bits = 32;
 	
-	// Update the four byte size field of the color profile. 
 	while (bits) {
 		image_vec[profile_size_field_index++] = (PROFILE_SIZE >> (bits -= 8)) & 0xFF;
 	}
