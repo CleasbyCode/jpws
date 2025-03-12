@@ -1,7 +1,7 @@
 void displayInfo() {
 	std::cout << R"(
 
-JPG-PowerShell Polyglot for X/Twitter (jpws v1.1) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024 
+JPG-PowerShell Polyglot for X/Twitter (jpws v1.2) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024 
 
 CLI tool for embedding a PowerShell script within a tweetable JPG image file.
 
@@ -18,7 +18,7 @@ Usage: jpws <cover_image> <powershell_script>
 Share your "PowerShell-embedded" JPG image on X/Twitter.
 
 Max script size is ~10KB. 
-Max image size is 2MB.
+Max image size is 4MB.
 
 https://github.com/CleasbyCode/jpws
 
