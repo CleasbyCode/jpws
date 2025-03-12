@@ -1,4 +1,3 @@
-
 bool hasValidFilename(const std::string& filename) {
 	return std::all_of(filename.begin(), filename.end(), 
         	[](char c) { return std::isalnum(c) || c == '.' || c == '/' || c == '\\' || c == '-' || c == '_' || c == '@' || c == '%'; });
@@ -13,8 +12,7 @@ bool hasValidPowershellExtension(const std::string& ext) {
     	return ext == ".ps1";
 }
 
-void validateFiles(const std::string& image_file, const std::string& powershell_file) {
-	
+void validateFiles(const std::string& image_file, const std::string& powershell_file) {	
 	std::filesystem::path image_path(image_file), powershell_path(powershell_file);
 
     	std::string 
@@ -44,7 +42,6 @@ void validateFiles(const std::string& image_file, const std::string& powershell_
     	constexpr uint8_t 
 		MINIMUM_IMAGE_SIZE = 134,
 		MINIMUM_SCRIPT_SIZE = 10;
-
 
     	if (MINIMUM_IMAGE_SIZE > std::filesystem::file_size(image_path)) {
         	throw std::runtime_error("Image File Error: Invalid file size.");
