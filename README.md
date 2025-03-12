@@ -19,7 +19,7 @@ user1@linuxbox:~/Desktop$ jpws
 Usage: jpws [-alt] <cover_image> <powershell_script>  
        jpws --info
 
-user1@linuxbox:~/Desktop$ jpws cover_image38.jpg GameOfLife.ps1
+user1@linuxbox:~/Desktop$ jpws dragon.jpg sinewave.ps1
 
 Saved "PowerShell-embedded" JPG image: jpws_10247.jpg (121098 bytes).
 
