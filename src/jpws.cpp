@@ -68,7 +68,7 @@ int jpws(const std::string& IMAGE_FILENAME, const std::string& POWERSHELL_FILENA
 
 	if  (shouldEncodeImage) {	
 
-		uint8_t quality_val = 100;
+		uint8_t quality_val = 97;
 			
 		uint16_t 
 			decrease_attempts = 300,
