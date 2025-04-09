@@ -149,7 +149,7 @@ https://github.com/user-attachments/assets/2e49ea69-7e33-4b43-bcba-cb0a9678a4f7
 
 This project makes use of the following third-party libraries:  
 
-stb_image by Sean Barrett (“nothings”)  
+[stb_image](https://github.com/nothings/stb) by Sean Barrett (“nothings”)  
 
 libjpeg-turbo (see [***LICENSE***](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md) file)  
 {This software is based in part on the work of the Independent JPEG Group.}
