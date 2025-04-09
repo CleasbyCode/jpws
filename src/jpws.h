@@ -6,7 +6,7 @@
 // https://github.com/nothings/stb
 
 // This software is based in part on the work of the Independent JPEG Group.
-#include "libjpeg-turbo/turbojpeg.h"
+#include <turbojpeg.h>
 // https://github.com/libjpeg-turbo/libjpeg-turbo
 
 #include <algorithm>
