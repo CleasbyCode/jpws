@@ -10,7 +10,7 @@ Embed a ***PowerShell*** script within a ***JPG*** image to create a tweetable *
 
 ```console
 
-user1@linuxbox:~/Downloads/src$ sudo apt-get install libturbojpeg-dev
+user1@linuxbox:~/Downloads/src$ sudo apt-get install libturbojpeg0-dev
 user1@linuxbox:~/Downloads/src$ g++ main.cpp -O2 -lturbojpeg -s -o jpws
 user1@linuxbox:~/Downloads/src$ sudo cp jpws /usr/bin
 
