@@ -9,8 +9,8 @@ enum class ArgOption {
 
 struct ProgramArgs {
 	ArgOption lastBlockString = ArgOption::Default;
-    	std::string image_file;
-    	std::string script_file;
+    std::string image_file;
+    std::string script_file;
 
-    	static ProgramArgs parse(int argc, char** argv);
+    static ProgramArgs parse(int argc, char** argv);
 };
