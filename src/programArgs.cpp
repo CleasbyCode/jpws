@@ -1,6 +1,7 @@
 #include "programArgs.h"
 #include "information.h"       
-#include <stdexcept>       
+#include <stdexcept>      
+#include <cstdint>
 #include <cstdlib> 
 
 ProgramArgs ProgramArgs::parse(int argc, char** argv) {
@@ -28,3 +29,4 @@ ProgramArgs ProgramArgs::parse(int argc, char** argv) {
     args.script_file = argv[++arg_index];
     return args;
 }
+
