@@ -119,8 +119,8 @@ int main(int argc, char** argv) {
 		ProgramArgs args = ProgramArgs::parse(argc, argv);
 		
 		std::vector<uint8_t> 
-        		image_vec,
-        		script_vec;
+        	image_vec,
+        	script_vec;
 		
 		uintmax_t image_file_size = 0;
 		
@@ -178,6 +178,7 @@ int main(int argc, char** argv) {
 		if  (image_vec[0x0D] != COMPATIBLE_IMAGE_VAL) {	
 
 			uint8_t quality_val = 97;	
+			
 			uint16_t 
 				decrease_attempts = 300,
 				decrease_dims_val = 0;
