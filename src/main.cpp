@@ -195,7 +195,6 @@ int main(int argc, char** argv) {
 			shouldDecreaseVals = true;
 
 			while(comment_block_pos != image_vec.size()) {
-				// image_vec.clear();
 				std::vector<uint8_t>().swap(image_vec);
 				image_vec = image_vec_copy; 
 
@@ -220,7 +219,7 @@ int main(int argc, char** argv) {
 
 		constexpr std::array<uint8_t, 11>
 			DEFAULT_BYTES 	{ 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x23, 0x3E, 0x0D, 0x23, 0x9e },
-			ALT_BYTES	{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; 
+			ALT_BYTES		{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; 
 
 		if (args.lastBlockString == ArgOption::Alt) {
 			std::copy(ALT_BYTES.rbegin(), ALT_BYTES.rend(), image_vec.rbegin() + 2);
@@ -292,7 +291,7 @@ int main(int argc, char** argv) {
 
 		std::random_device rd;
     		std::mt19937 gen(rd());
-    		std::uniform_int_distribution<> dist(10000, 99999);  // Five-digit random number
+    		std::uniform_int_distribution<> dist(10000, 99999);  
 
 		const std::string OUTPUT_FILENAME = "jpws_" + std::to_string(dist(gen)) + ".jpg";
 
@@ -323,3 +322,4 @@ int main(int argc, char** argv) {
         	return 1;
     	}
 }
+
