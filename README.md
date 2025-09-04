@@ -11,9 +11,10 @@ Embed a ***PowerShell*** script within a ***JPG*** image to create a tweetable *
 ```console
 
 user1@linuxbox:~/Downloads/src$ sudo apt-get install libturbojpeg0-dev
-user1@linuxbox:~/Downloads/src$ g++ main.cpp -O2 -lturbojpeg -s -o jpws
+user1@linuxbox:~/Downloads/src$ chmod +x compile_jpws.sh
+user1@linuxbox:~/Downloads/src$ ./compile_jpws.sh
+user1@linuxbox:~/Downloads/src$ Compilation successful. Executable 'jpws' created.
 user1@linuxbox:~/Downloads/src$ sudo cp jpws /usr/bin
-
 user1@linuxbox:~/Desktop$ jpws
 
 Usage: jpws [-alt] <cover_image> <powershell_script>  
