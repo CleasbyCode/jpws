@@ -91,45 +91,44 @@ struct ProgramArgs {
 	static ProgramArgs parse(int argc, char** argv) {
 		using std::string_view;
 
-        	auto arg = [&](int i) -> string_view {
+        auto arg = [&](int i) -> string_view {
 			return (i >= 0 && i < argc) ? string_view(argv[i]) : string_view{};
-        	};
+        };
 
-        	const std::string prog = fs::path(argv[0]).filename().string();
-        	const std::string USAGE =
-        		"Usage: " + prog + " [-alt] <cover_image> <powershell_script>\n\t\b"
-            		+ prog + " --info";
+        const std::string prog = fs::path(argv[0]).filename().string();
+        const std::string USAGE = "Usage: " + prog + " [-alt] <cover_image> <powershell_script>\n\t\b" + prog + " --info";
             
-        	auto die = [&]() -> void {
+        auto die = [&]() -> void {
         		throw std::runtime_error(USAGE);
-        	};
+        };
 
-        	if (argc < 2) die();
+        if (argc < 2) die();
 
-        	if (argc == 2 && arg(1) == "--info") {
-        		displayInfo();
-        		std::exit(0);
-        	}
+        if (argc == 2 && arg(1) == "--info") {
+        	displayInfo();
+        	std::exit(0);
+        }
 
 		ProgramArgs out{};
 
-        	const string_view opt = arg(1);
+        const string_view opt = arg(1);
 
-        	if (opt == "-alt") {
-        		int i = 2;
+        if (opt == "-alt") {
+        	int i = 2;
         	
-            		if (argc != 4) die();
+            if (argc != 4) die();
 
-            		out.image_file_path = fs::path(arg(i));
-            		out.pwsh_file_path  = fs::path(arg(i + 1));
-            		out.option = Option::Alt;
-            		return out;
-        	} else {
-        		if (argc != 3) die();
-        		out.image_file_path = fs::path(arg(1));
-            		out.pwsh_file_path  = fs::path(arg(2));
-            		return out;
-        	}
+            out.image_file_path = fs::path(arg(i));
+            out.pwsh_file_path  = fs::path(arg(i + 1));
+            out.option = Option::Alt;
+            return out;
+			
+        } else {
+        	if (argc != 3) die();
+        	out.image_file_path = fs::path(arg(1));
+            out.pwsh_file_path  = fs::path(arg(2));
+            return out;
+        }
         
         	die();
         	return out; // Keeps compiler happy.
@@ -141,27 +140,27 @@ static inline bool hasValidFilename(const fs::path& p) {
    	 	return false;
    	}
     
-    	std::string filename = p.filename().string();
-    	if (filename.empty()) {
-    		return false;
-    	}
+    std::string filename = p.filename().string();
+    if (filename.empty()) {
+    	return false;
+    }
 
-    	auto validChar = [](unsigned char c) {
-    		return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '@' || c == '%';
+    auto validChar = [](unsigned char c) {
+    	return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '@' || c == '%';
  	};
 
-    	return std::all_of(filename.begin(), filename.end(), validChar);
+    return std::all_of(filename.begin(), filename.end(), validChar);
 }
 
 static inline bool hasFileExtension(const fs::path& p, std::initializer_list<const char*> exts) {
 	auto e = p.extension().string();
-    	std::transform(e.begin(), e.end(), e.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
-    	for (const char* cand : exts) {
-    		std::string c = cand;
-        	std::transform(c.begin(), c.end(), c.begin(), [](unsigned char x){ return static_cast<char>(std::tolower(x)); });
-        	if (e == c) return true;
-    	}
-    	return false;
+    std::transform(e.begin(), e.end(), e.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    for (const char* cand : exts) {
+    	std::string c = cand;
+        std::transform(c.begin(), c.end(), c.begin(), [](unsigned char x){ return static_cast<char>(std::tolower(x)); });
+        if (e == c) return true;
+    }
+    return false;
 }
 
 // Return vector index location for relevant signature search.
@@ -172,74 +171,74 @@ static inline uint32_t searchSig(std::vector<uint8_t>& vec, const std::array<T, 
 
 static inline void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_val, uint16_t decrease_dims_val, bool shouldDecreaseVals) {
 	tjhandle decompressor = tjInitDecompress();
-    	if (!decompressor) {
-        	throw std::runtime_error("tjInitDecompress() failed.");
-    	}	
+    if (!decompressor) {
+        throw std::runtime_error("tjInitDecompress() failed.");
+    }	
 
-    	int width = 0, height = 0;
-    	int jpegSubsamp = 0, jpegColorspace = 0;
+    int width = 0, height = 0;
+    int jpegSubsamp = 0, jpegColorspace = 0;
 
-    	if (tjDecompressHeader3(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
-        	tjDestroy(decompressor);
-        	throw std::runtime_error(std::string("tjDecompressHeader3: ") + tjGetErrorStr());
-    	}
+    if (tjDecompressHeader3(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
+        tjDestroy(decompressor);
+        throw std::runtime_error(std::string("tjDecompressHeader3: ") + tjGetErrorStr());
+    }
 
-    	if (width < decrease_dims_val || height < decrease_dims_val) {
-        	tjDestroy(decompressor);
-        	throw std::runtime_error("Image is too small to decrease by 1 pixel.");
-    	}
+    if (width < decrease_dims_val || height < decrease_dims_val) {
+        tjDestroy(decompressor);
+        throw std::runtime_error("Image is too small to decrease by 1 pixel.");
+    }
 
-    	const int channels = 3;
-    	std::vector<uint8_t> decoded_image_vec(width * height * channels);
+    const int channels = 3;
+    std::vector<uint8_t> decoded_image_vec(width * height * channels);
 
-    	if (tjDecompress2(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, TJPF_RGB, 0) != 0) {
-        	tjDestroy(decompressor);
-        	throw std::runtime_error(std::string("tjDecompress2: ") + tjGetErrorStr());
-    	}
-
+    if (tjDecompress2(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, TJPF_RGB, 0) != 0) {
     	tjDestroy(decompressor);
+        throw std::runtime_error(std::string("tjDecompress2: ") + tjGetErrorStr());
+    }
 
-    	int newWidth = 0;
-    	int newHeight = 0;
+    tjDestroy(decompressor);
 
-    	if (shouldDecreaseVals) {
-        	newWidth  = width  - decrease_dims_val;
-        	newHeight = height - decrease_dims_val;
-    	} else {
-        	newWidth  = width;
-        	newHeight = height;
-    	}
+    int newWidth = 0;
+    int newHeight = 0;
 
-    	std::cout << "\r" << std::string(44, ' ') << "\r"; 
-    	std::cout << "Quality: " << (int)quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush; 
+    if (shouldDecreaseVals) {
+    	newWidth  = width  - decrease_dims_val;
+        newHeight = height - decrease_dims_val;
+    } else {
+    	newWidth  = width;
+        newHeight = height;
+    }
 
-    	std::vector<uint8_t> resized_image_vec(newWidth * newHeight * channels);
+    std::cout << "\r" << std::string(44, ' ') << "\r"; 
+    std::cout << "Quality: " << (int)quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush; 
 
-    	if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(channels))) {
-        	throw std::runtime_error("stbir_resize_uint8_srgb failed.");
-    	}
+    std::vector<uint8_t> resized_image_vec(newWidth * newHeight * channels);
 
-    	tjhandle compressor = tjInitCompress();
-    	if (!compressor) {
-        	throw std::runtime_error("tjInitCompress() failed.");
-    	}
+    if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(channels))) {
+    	throw std::runtime_error("stbir_resize_uint8_srgb failed.");
+    }
 
-    	unsigned char* jpegBuf  = nullptr;
-    	unsigned long  jpegSize = 0;
+    tjhandle compressor = tjInitCompress();
+    if (!compressor) {
+        throw std::runtime_error("tjInitCompress() failed.");
+    }
 
-    	int flags = TJFLAG_PROGRESSIVE;  
+    unsigned char* jpegBuf  = nullptr;
+    unsigned long  jpegSize = 0;
 
-    	if (tjCompress2(compressor, resized_image_vec.data(), newWidth, 0, newHeight, TJPF_RGB, &jpegBuf, &jpegSize, jpegSubsamp, quality_val, flags) != 0) {
-        	tjDestroy(compressor);
-        	throw std::runtime_error(std::string("tjCompress2: ") + tjGetErrorStr());
-    	}
+    int flags = TJFLAG_PROGRESSIVE;  
 
+    if (tjCompress2(compressor, resized_image_vec.data(), newWidth, 0, newHeight, TJPF_RGB, &jpegBuf, &jpegSize, jpegSubsamp, quality_val, flags) != 0) {
     	tjDestroy(compressor);
+        throw std::runtime_error(std::string("tjCompress2: ") + tjGetErrorStr());
+    }
 
-    	std::vector<uint8_t> output_image_vec(jpegBuf, jpegBuf + jpegSize);
-    	tjFree(jpegBuf);
+    tjDestroy(compressor);
 
-    	image_file_vec.swap(output_image_vec);
+    std::vector<uint8_t> output_image_vec(jpegBuf, jpegBuf + jpegSize);
+    tjFree(jpegBuf);
+
+    image_file_vec.swap(output_image_vec);
 }
 
 int main(int argc, char** argv) {
@@ -247,34 +246,34 @@ int main(int argc, char** argv) {
 		ProgramArgs args = ProgramArgs::parse(argc, argv);
 		
 		if (!fs::exists(args.image_file_path)) {
-        		throw std::runtime_error("Image File Error: File not found.");
-    		}
+        	throw std::runtime_error("Image File Error: File not found.");
+    	}
 			
 		if (!hasValidFilename(args.image_file_path)) {
-    			throw std::runtime_error("Invalid Input Error: Unsupported characters in filename arguments.");
+    		throw std::runtime_error("Invalid Input Error: Unsupported characters in filename arguments.");
 		}
 
 		if (!hasFileExtension(args.image_file_path, {".jpg", ".jpeg", ".jfif"})) {
-        		throw std::runtime_error("File Type Error: Invalid image extension. Only expecting \".jpg\", \".jpeg\", or \".jfif\".");
-    		}	
+        	throw std::runtime_error("File Type Error: Invalid image extension. Only expecting \".jpg\", \".jpeg\", or \".jfif\".");
+    	}	
     			
 		std::ifstream image_file_ifs(args.image_file_path, std::ios::binary);
         	
-    		if (!image_file_ifs) {
-    			throw std::runtime_error("Read File Error: Unable to read image file. Check the filename and try again.");
+    	if (!image_file_ifs) {
+    		throw std::runtime_error("Read File Error: Unable to read image file. Check the filename and try again.");
    		}
 		
 		uintmax_t image_file_size = fs::file_size(args.image_file_path);
 
-    		constexpr uint8_t MIN_IMAGE_SIZE = 134;
+    	constexpr uint8_t MIN_IMAGE_SIZE = 134;
 
-    		if (MIN_IMAGE_SIZE > image_file_size) {
-        		throw std::runtime_error("Image File Error: Invalid file size.");
-    		}
+    	if (MIN_IMAGE_SIZE > image_file_size) {
+        	throw std::runtime_error("Image File Error: Invalid file size.");
+    	}
 
-    		constexpr uintmax_t MAX_IMAGE_SIZE = 4ULL * 1024 * 1024;
+    	constexpr uintmax_t MAX_IMAGE_SIZE = 4ULL * 1024 * 1024;
     
-    		if (image_file_size > MAX_IMAGE_SIZE) {
+    	if (image_file_size > MAX_IMAGE_SIZE) {
    			throw std::runtime_error("Image Size Error: Size of cover image exceeds maximum size limit.");
    		}
    		
@@ -288,13 +287,13 @@ int main(int argc, char** argv) {
 			IMAGE_END_SIG   { 0xFF, 0xD9 };
 
 		if (!std::equal(IMAGE_START_SIG.begin(), IMAGE_START_SIG.end(), image_file_vec.begin()) || !std::equal(IMAGE_END_SIG.begin(), IMAGE_END_SIG.end(), image_file_vec.end() - 2)) {
-    			throw std::runtime_error("Image File Error: This is not a valid JPG image.");
+    		throw std::runtime_error("Image File Error: This is not a valid JPG image.");
 		}
 		
 		constexpr std::array<uint8_t, 2>
 			COMMENT_BLOCK_SIG 	{ 0x23, 0x3E },
-			APP1_SIG 		{ 0xFF, 0xE1 }, // EXIF SEGMENT MARKER.
-			APP2_SIG 		{ 0xFF, 0xE2 }; // ICC COLOR PROFILE SEGMENT MARKER.
+			APP1_SIG 			{ 0xFF, 0xE1 }, // EXIF SEGMENT MARKER.
+			APP2_SIG 			{ 0xFF, 0xE2 }; // ICC COLOR PROFILE SEGMENT MARKER.
 
 		constexpr std::array<uint8_t, 4>
 			DQT1_SIG { 0xFF, 0xDB, 0x00, 0x43 },
@@ -383,7 +382,7 @@ int main(int argc, char** argv) {
 
 		constexpr std::array<uint8_t, 11>
 			DEFAULT_BYTES 	{ 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x23, 0x3E, 0x0D, 0x23, 0x9e },
-			ALT_BYTES	{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; 
+			ALT_BYTES		{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; 
 
 		if (args.option == Option::Alt) {
 			std::copy(ALT_BYTES.rbegin(), ALT_BYTES.rend(), image_file_vec.rbegin() + 2);
@@ -394,32 +393,32 @@ int main(int argc, char** argv) {
 		constexpr uint8_t PWSH_INSERT_INDEX = 6;
 			
 		if (!fs::exists(args.pwsh_file_path)) {
-        		throw std::runtime_error("Script File Error: PowerShell script file not found.");
-    		}
+        	throw std::runtime_error("Script File Error: PowerShell script file not found.");
+    	}
 			
 		if (!hasValidFilename(args.pwsh_file_path)) {
-    			throw std::runtime_error("Invalid Input Error: Unsupported characters in filename arguments.");
+    		throw std::runtime_error("Invalid Input Error: Unsupported characters in filename arguments.");
 		}
 
 		if (!hasFileExtension(args.pwsh_file_path, {".ps1"})) {
-        		throw std::runtime_error("File Type Error: Invalid script extension. Only expecting \".ps1\".");
-    		}	
+        	throw std::runtime_error("File Type Error: Invalid script extension. Only expecting \".ps1\".");
+    	}	
     			
 		std::ifstream pwsh_file_ifs(args.pwsh_file_path, std::ios::binary);
         	
-    		if (!pwsh_file_ifs) {
-    			throw std::runtime_error("Read File Error: Unable to read image file. Check the filename and try again.");
+    	if (!pwsh_file_ifs) {
+    		throw std::runtime_error("Read File Error: Unable to read image file. Check the filename and try again.");
    		}
 		
 		uintmax_t pwsh_file_size = fs::file_size(args.pwsh_file_path);
 		
 		constexpr uint16_t MAX_PWSH_SIZE = 10ULL * 1024;
 
-    		constexpr uint8_t MIN_PWSH_SIZE = 10;
+    	constexpr uint8_t MIN_PWSH_SIZE = 10;
 	
 		if (MIN_PWSH_SIZE > pwsh_file_size) {
-        		throw std::runtime_error("PowerShell File Error: Invalid file size.");
-    		}
+        	throw std::runtime_error("PowerShell File Error: Invalid file size.");
+    	}
 	
 		if (pwsh_file_size > MAX_PWSH_SIZE) {
 			throw std::runtime_error("PowerShell File Error: Size of PowerShell script exceeds maximum size limit.");
@@ -433,8 +432,8 @@ int main(int argc, char** argv) {
 		constexpr std::array<uint8_t, 3> BOM_SIG { 0xEF, 0xBB, 0xBF };
 	
 		if (std::equal(BOM_SIG.begin(), BOM_SIG.end(), pwsh_file_vec.begin())) {
-        		pwsh_file_vec.erase(pwsh_file_vec.begin(), pwsh_file_vec.begin() + 3);
-        	}		
+        	pwsh_file_vec.erase(pwsh_file_vec.begin(), pwsh_file_vec.begin() + 3);
+        }		
 	
 		std::vector<uint8_t>profile_vec = { 
 			0xFF, 0xE2, 0x00, 0x00, 0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x5F, 0x6A, 0x70, 0x77, 
@@ -495,8 +494,8 @@ int main(int argc, char** argv) {
 		std::copy(JFIF_COMMENT_BLOCK.begin(), JFIF_COMMENT_BLOCK.end(), image_file_vec.begin() + jfif_comment_block_index);
 
 		std::random_device rd;
-    		std::mt19937 gen(rd());
-    		std::uniform_int_distribution<> dist(10000, 99999);  // Five-digit random number
+    	std::mt19937 gen(rd());
+    	std::uniform_int_distribution<> dist(10000, 99999);  // Five-digit random number
 
 		const std::string OUTPUT_FILENAME = "jpws_" + std::to_string(dist(gen)) + ".jpg";
 
@@ -523,7 +522,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 	catch (const std::runtime_error& e) {
-        	std::cerr << "\n" << e.what() << "\n\n";
-        	return 1;
-    	}
+    	std::cerr << "\n" << e.what() << "\n\n";
+        return 1;
+    }
 }
