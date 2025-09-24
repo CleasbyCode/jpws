@@ -33,6 +33,10 @@
 
 #include <algorithm>
 #include <string>
+#include <cctype>
+#include <initializer_list>
+#include <stdexcept>
+#include <cstdlib>
 #include <string_view>
 #include <vector>
 #include <array>
@@ -526,3 +530,4 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
