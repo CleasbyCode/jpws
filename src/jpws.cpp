@@ -48,7 +48,7 @@
 
 namespace fs = std::filesystem;
 
-static inline void displayInfo() {
+static void displayInfo() {
 	std::cout << R"(
 
 JPG-PowerShell Polyglot for X-Twitter (jpws v1.4)
@@ -139,7 +139,7 @@ struct ProgramArgs {
     	}
 };
 
-static inline bool hasValidFilename(const fs::path& p) {
+static bool hasValidFilename(const fs::path& p) {
 	if (p.empty()) {
    	 	return false;
    	}
@@ -156,7 +156,7 @@ static inline bool hasValidFilename(const fs::path& p) {
     return std::all_of(filename.begin(), filename.end(), validChar);
 }
 
-static inline bool hasFileExtension(const fs::path& p, std::initializer_list<const char*> exts) {
+static bool hasFileExtension(const fs::path& p, std::initializer_list<const char*> exts) {
 	auto e = p.extension().string();
     std::transform(e.begin(), e.end(), e.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
     for (const char* cand : exts) {
@@ -169,11 +169,11 @@ static inline bool hasFileExtension(const fs::path& p, std::initializer_list<con
 
 // Return vector index location for relevant signature search.
 template <typename T, size_t N>
-static inline uint32_t searchSig(std::vector<uint8_t>& vec, const std::array<T, N>& SIG) {
+static uint32_t searchSig(std::vector<uint8_t>& vec, const std::array<T, N>& SIG) {
 	return static_cast<uint32_t>(std::search(vec.begin(), vec.end(), SIG.begin(), SIG.end()) - vec.begin());
 }
 
-static inline void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_val, uint16_t decrease_dims_val, bool shouldDecreaseVals) {
+static void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_val, uint16_t decrease_dims_val, bool shouldDecreaseVals) {
 	tjhandle decompressor = tjInitDecompress();
     if (!decompressor) {
         throw std::runtime_error("tjInitDecompress() failed.");
@@ -530,4 +530,5 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
