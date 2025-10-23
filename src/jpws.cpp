@@ -1,4 +1,4 @@
-// JPG-PowerShell Polyglot for X-Twitter (jpws v1.4) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
+// JPG-PowerShell Polyglot for X-Twitter (jpws v1.5) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
 
 // CLI source code (Linux / Windows).
 
@@ -16,7 +16,6 @@
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image/include/stb_image_resize2.h"
-
 // stb_image by Sean Barrett (“nothings”).
 // https://github.com/nothings/stb
 
@@ -25,7 +24,6 @@
 #else
 	#include <turbojpeg.h>
 #endif
-
 // This software is based in part on the work of the Independent JPEG Group.
 // Copyright (C) 2009-2024 D. R. Commander. All Rights Reserved.
 // Copyright (C) 2015 Viktor Szathmáry. All Rights Reserved.
@@ -34,9 +32,13 @@
 #include <algorithm>
 #include <string>
 #include <cctype>
+#include <cstring>
 #include <initializer_list>
+#include <optional>
 #include <stdexcept>
 #include <cstdlib>
+#include <limits>
+#include <span>
 #include <string_view>
 #include <vector>
 #include <array>
@@ -51,7 +53,7 @@ namespace fs = std::filesystem;
 static void displayInfo() {
 	std::cout << R"(
 
-JPG-PowerShell Polyglot for X-Twitter (jpws v1.4)
+JPG-PowerShell Polyglot for X-Twitter (jpws v1.5)
 Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024 
 
 CLI tool for embedding a PowerShell script within a JPG image, 
@@ -92,7 +94,7 @@ struct ProgramArgs {
 	fs::path image_file_path;
 	fs::path pwsh_file_path;
     
-	static ProgramArgs parse(int argc, char** argv) {
+	static std::optional<ProgramArgs> parse(int argc, char** argv) {
 		using std::string_view;
 
         auto arg = [&](int i) -> string_view {
@@ -100,17 +102,19 @@ struct ProgramArgs {
         };
 
         const std::string prog = fs::path(argv[0]).filename().string();
-        const std::string USAGE = "Usage: " + prog + " [-alt] <cover_image> <powershell_script>\n\t\b" + prog + " --info";
+        const std::string USAGE =
+        	"Usage: " + prog + " [-alt] <cover_image> <powershell_script>\n\t\b"
+            	+ prog + " --info";
             
         auto die = [&]() -> void {
-        		throw std::runtime_error(USAGE);
+        	throw std::runtime_error(USAGE);
         };
 
         if (argc < 2) die();
 
         if (argc == 2 && arg(1) == "--info") {
         	displayInfo();
-        	std::exit(0);
+        	return std::nullopt;
         }
 
 		ProgramArgs out{};
@@ -126,22 +130,20 @@ struct ProgramArgs {
             out.pwsh_file_path  = fs::path(arg(i + 1));
             out.option = Option::Alt;
             return out;
-			
         } else {
         	if (argc != 3) die();
         	out.image_file_path = fs::path(arg(1));
             out.pwsh_file_path  = fs::path(arg(2));
             return out;
         }
-        
-        	die();
-        	return out; // Keeps compiler happy.
-    	}
+        die();
+        return out; // Keeps compiler happy.
+    }
 };
 
 static bool hasValidFilename(const fs::path& p) {
 	if (p.empty()) {
-   	 	return false;
+   		return false;
    	}
     
     std::string filename = p.filename().string();
@@ -167,20 +169,140 @@ static bool hasFileExtension(const fs::path& p, std::initializer_list<const char
     return false;
 }
 
-// Return vector index location for relevant signature search.
-template <typename T, size_t N>
-static uint32_t searchSig(std::vector<uint8_t>& vec, const std::array<T, N>& SIG) {
-	return static_cast<uint32_t>(std::search(vec.begin(), vec.end(), SIG.begin(), SIG.end()) - vec.begin());
+// searchSig function searches a byte vector (uint8_t) for a fixed byte pattern and returns the offset of the first match, or std::nullopt if there’s no match.
+// It uses std::search on v.begin().. v.end() with the pattern given by sig.begin().. sig.end(). 
+	
+// The std::span<const uint8_t> parameter lets you pass anything contiguous - std::array, C-array, another std::vector, or a subrange, without copying. 
+// If std::search returns v.end(), the function maps that to std::nullopt; otherwise it converts the iterator difference to a size_t index.
+// I often then convert the size_t index result to uint32_t for compatibiblty reasons for other parts of the program.
+static std::optional<size_t> searchSig(const std::vector<uint8_t>& v, std::span<const uint8_t> sig) {
+	auto it = std::search(v.begin(), v.end(), sig.begin(), sig.end());
+	if (it == v.end()) return std::nullopt;
+	return static_cast<size_t>(it - v.begin());
 }
 
-static void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_val, uint16_t decrease_dims_val, bool shouldDecreaseVals) {
+// First search for an EXIF segment, if found search for an Orientation tag.
+// Returns 1..8 if found and passed to normalize_orientation, or std::nullopt if no EXIF/Orientation.
+static std::optional<uint16_t> exif_orientation(const std::vector<uint8_t>& jpg) {
+	const uint8_t APP1[] = {0xFF, 0xE1};
+    auto app1 = searchSig(jpg, std::span<const uint8_t>(APP1, 2));
+    if (!app1) return std::nullopt;
+
+    size_t p = *app1;
+    if (p + 4 > jpg.size()) return std::nullopt;
+
+    uint16_t len = (static_cast<uint16_t>(jpg[p+2]) << 8) | jpg[p+3];
+    size_t exif_end = p + 2 + len;            
+    if (exif_end > jpg.size()) return std::nullopt;
+
+    size_t exif_start = p + 4;
+    if (exif_start + 6 > exif_end) return std::nullopt;
+    if (std::memcmp(&jpg[exif_start], "Exif\0\0", 6) != 0) return std::nullopt;
+
+    size_t tiff = exif_start + 6;
+    if (tiff + 8 > exif_end) return std::nullopt;
+
+    bool le = false;
+    if (jpg[tiff] == 'I' && jpg[tiff+1] == 'I') le = true;
+    else if (jpg[tiff] == 'M' && jpg[tiff+1] == 'M') le = false;
+    else return std::nullopt;
+
+    auto rd16 = [&](size_t off) -> uint16_t {
+    	if (off + 1 >= exif_end) return 0;
+    	return le ? (uint16_t)(jpg[off] | (jpg[off+1] << 8)) : (uint16_t)((jpg[off] << 8) | jpg[off+1]);
+    };
+	
+    auto rd32 = [&](size_t off) -> uint32_t {
+		if (off + 3 >= exif_end) return 0;
+        return le ? (uint32_t)(jpg[off] | (jpg[off+1] << 8) | (jpg[off+2] << 16) | (jpg[off+3] << 24)) : (uint32_t)((jpg[off] << 24) | (jpg[off+1] << 16) | (jpg[off+2] << 8) | jpg[off+3]);
+    };
+
+    if (rd16(tiff + 2) != 0x002A) return std::nullopt;
+    
+	uint32_t ifd0_off = rd32(tiff + 4);
+	
+    size_t ifd = tiff + ifd0_off;
+    if (ifd + 2 > exif_end) return std::nullopt;
+
+    uint16_t count = rd16(ifd);
+    ifd += 2;
+	
+    for (uint16_t i = 0; i < count; ++i) {
+    	size_t entry = ifd + i * 12;
+    	if (entry + 12 > exif_end) return std::nullopt;
+        uint16_t tag = rd16(entry + 0);
+        if (tag == 0x0112) {
+        	return rd16(entry + 8); // 1..8 usually. 
+        }
+    }
+    return std::nullopt;
+}
+
+static void rotate_rgb_180(std::vector<uint8_t>& rgb, int w, int h) {
+	const int stride = w * 3;
+	for (int y = 0; y < h / 2; ++y) {
+    	int opp = h - 1 - y;
+        for (int x = 0; x < w; ++x) {
+        	for (int c = 0; c < 3; ++c)
+                std::swap(rgb[y*stride + x*3 + c], rgb[opp*stride + (w-1-x)*3 + c]);
+        }
+    }
+    if (h % 2 == 1) {
+    	int y = h/2;
+        for (int x = 0; x < w/2; ++x)
+            for (int c = 0; c < 3; ++c)
+                std::swap(rgb[y*stride + x*3 + c], rgb[y*stride + (w-1-x)*3 + c]);
+    }
+}
+
+static void rotate_rgb_90cw(std::vector<uint8_t>& rgb, int& w, int& h) {
+	std::vector<uint8_t> out(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+    int nw = h;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+        	int nx = h - 1 - y, ny = x;
+            for (int c = 0; c < 3; ++c)
+                out[(static_cast<size_t>(ny) * nw + nx) * 3 + c] = rgb[(static_cast<size_t>(y) * w + x) * 3 + c];
+        }
+    }
+    rgb.swap(out);
+    std::swap(w, h);
+}
+
+static void rotate_rgb_270cw(std::vector<uint8_t>& rgb, int& w, int& h) {
+    std::vector<uint8_t> out(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+    int nw = h;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int nx = y, ny = w - 1 - x;
+            for (int c = 0; c < 3; ++c)
+                out[(static_cast<size_t>(ny) * nw + nx) * 3 + c] = rgb[(static_cast<size_t>(y) * w + x) * 3 + c];
+        }
+    }
+    rgb.swap(out);
+    std::swap(w, h);
+}
+
+// If exif_orientation found an Orientation tag, use normalize_orientation 
+// and its above helpers to normalize the pixels, so that we can later safely remove
+// the EXIF segment from the cover image and have correct orientation with viewers.
+// Minimal mapper: handle 3,6,8 (most common). Add flips (2,4,5,7)...
+static void normalize_orientation(std::vector<uint8_t>& rgb, int& w, int& h, int ori) {
+	switch (ori) {
+    	case 3: rotate_rgb_180(rgb, w, h); break;
+        case 6: rotate_rgb_90cw(rgb, w, h); break;
+        case 8: rotate_rgb_270cw(rgb, w, h); break;
+        default: /* 1 or unsupported -> do nothing */ break;
+    }
+}
+
+static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, int decrease_dims_val, bool shouldDecreaseVals) {
 	tjhandle decompressor = tjInitDecompress();
     if (!decompressor) {
-        throw std::runtime_error("tjInitDecompress() failed.");
+    	throw std::runtime_error("tjInitDecompress() failed.");
     }	
 
-    int width = 0, height = 0;
-    int jpegSubsamp = 0, jpegColorspace = 0;
+    int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
 
     if (tjDecompressHeader3(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
         tjDestroy(decompressor);
@@ -201,21 +323,27 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_va
     }
 
     tjDestroy(decompressor);
-
-    int newWidth = 0;
-    int newHeight = 0;
-
+    
+    if (!shouldDecreaseVals) {
+    	auto ori = exif_orientation(image_file_vec);
+   		if (ori && *ori != 1) {
+   			normalize_orientation(decoded_image_vec, width, height, *ori);
+		}
+   	}
+   
+    int newWidth = 0, newHeight = 0;
+    
     if (shouldDecreaseVals) {
     	newWidth  = width  - decrease_dims_val;
         newHeight = height - decrease_dims_val;
+        
+        std::cout << "\r" << std::string(44, ' ') << "\r"; 
+    	std::cout << "Quality: " << (int)quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush; 
     } else {
     	newWidth  = width;
         newHeight = height;
     }
-
-    std::cout << "\r" << std::string(44, ' ') << "\r"; 
-    std::cout << "Quality: " << (int)quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush; 
-
+   
     std::vector<uint8_t> resized_image_vec(newWidth * newHeight * channels);
 
     if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(channels))) {
@@ -229,10 +357,14 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_va
 
     unsigned char* jpegBuf  = nullptr;
     unsigned long  jpegSize = 0;
-
-    int flags = TJFLAG_PROGRESSIVE;  
-
-    if (tjCompress2(compressor, resized_image_vec.data(), newWidth, 0, newHeight, TJPF_RGB, &jpegBuf, &jpegSize, jpegSubsamp, quality_val, flags) != 0) {
+    
+    int subsamp = TJSAMP_444, flags = 0;
+   
+    flags |= TJFLAG_PROGRESSIVE;
+   
+    flags |= (quality_val >= 90 ? TJFLAG_FASTDCT : TJFLAG_ACCURATEDCT);
+   
+    if (tjCompress2(compressor, resized_image_vec.data(), newWidth, 0, newHeight, TJPF_RGB, &jpegBuf, &jpegSize, subsamp, quality_val, flags) != 0) {
     	tjDestroy(compressor);
         throw std::runtime_error(std::string("tjCompress2: ") + tjGetErrorStr());
     }
@@ -247,7 +379,10 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, uint8_t quality_va
 
 int main(int argc, char** argv) {
 	try {
-		ProgramArgs args = ProgramArgs::parse(argc, argv);
+		auto args_opt = ProgramArgs::parse(argc, argv);
+       	if (!args_opt) return 0; 
+       		
+		ProgramArgs args = *args_opt; 
 		
 		if (!fs::exists(args.image_file_path)) {
         	throw std::runtime_error("Image File Error: File not found.");
@@ -275,7 +410,7 @@ int main(int argc, char** argv) {
         	throw std::runtime_error("Image File Error: Invalid file size.");
     	}
 
-    	constexpr uintmax_t MAX_IMAGE_SIZE = 4ULL * 1024 * 1024;
+    	constexpr uintmax_t MAX_IMAGE_SIZE = 4 * 1024 * 1024;
     
     	if (image_file_size > MAX_IMAGE_SIZE) {
    			throw std::runtime_error("Image Size Error: Size of cover image exceeds maximum size limit.");
@@ -286,82 +421,103 @@ int main(int argc, char** argv) {
 		image_file_ifs.read(reinterpret_cast<char*>(image_file_vec.data()), image_file_size);
 		image_file_ifs.close();
 	
-		constexpr std::array<uint8_t, 2>
-			IMAGE_START_SIG	{ 0xFF, 0xD8 },
-			IMAGE_END_SIG   { 0xFF, 0xD9 };
+		// Make sure JPG cover image has both "Start Of Image" & "End Of Image" markers.
+		// Also, remove any trailing data after EOI marker.
+		constexpr uint8_t 
+			SOI0 = 0xFF, 
+			SOI1 = 0xD8,
+   			EOI0 = 0xFF, 
+   			EOI1 = 0xD9;
 
-		if (!std::equal(IMAGE_START_SIG.begin(), IMAGE_START_SIG.end(), image_file_vec.begin()) || !std::equal(IMAGE_END_SIG.begin(), IMAGE_END_SIG.end(), image_file_vec.end() - 2)) {
-    		throw std::runtime_error("Image File Error: This is not a valid JPG image.");
-		}
+	  	if (!(image_file_vec[0] == SOI0 && image_file_vec[1] == SOI1)) {
+        	throw std::runtime_error("Image File Error: Missing SOI marker.");
+    	}
+
+    	const std::array<uint8_t,2> EOI {EOI0, EOI1};
+
+    	auto last_eoi = std::find_end(image_file_vec.begin() + 2, image_file_vec.end(), EOI.begin(), EOI.end());
+    	if (last_eoi == image_file_vec.end()) {
+        	throw std::runtime_error("Image File Error: Missing EOI marker.");
+    	}
+
+    	auto after_eoi = last_eoi + 2;
+    	if (after_eoi != image_file_vec.end()) {
+        	image_file_vec.erase(after_eoi, image_file_vec.end());
+    	}
+		//---------
 		
-		constexpr std::array<uint8_t, 2>
-			COMMENT_BLOCK_SIG 	{ 0x23, 0x3E },
-			APP1_SIG 			{ 0xFF, 0xE1 }, // EXIF SEGMENT MARKER.
-			APP2_SIG 			{ 0xFF, 0xE2 }; // ICC COLOR PROFILE SEGMENT MARKER.
-
-		constexpr std::array<uint8_t, 4>
-			DQT1_SIG { 0xFF, 0xDB, 0x00, 0x43 },
-			DQT2_SIG { 0xFF, 0xDB, 0x00, 0x84 };
-		
-		const uint32_t APP1_POS = searchSig(image_file_vec, APP1_SIG);
-
-		// Remove superfluous segments from cover image. (EXIF, ICC color profile, etc).
-
-		if (image_file_vec.size() > APP1_POS) {
-			const uint16_t APP1_BLOCK_SIZE = (static_cast<uint16_t>(image_file_vec[APP1_POS + 2]) << 8) | static_cast<uint16_t>(image_file_vec[APP1_POS + 3]);
-			image_file_vec.erase(image_file_vec.begin() + APP1_POS, image_file_vec.begin() + APP1_POS + APP1_BLOCK_SIZE + 2);
-		}
-
-		const uint32_t APP2_POS = searchSig(image_file_vec, APP2_SIG);
-		if (image_file_vec.size() > APP2_POS) {
-			const uint16_t APP2_BLOCK_SIZE = (static_cast<uint16_t>(image_file_vec[APP2_POS + 2]) << 8) | static_cast<uint16_t>(image_file_vec[APP2_POS + 3]);
-			image_file_vec.erase(image_file_vec.begin() + APP2_POS, image_file_vec.begin() + APP2_POS + APP2_BLOCK_SIZE + 2);
-		}
-
-		const uint32_t
-			DQT1_POS = searchSig(image_file_vec, DQT1_SIG),
-			DQT2_POS = searchSig(image_file_vec, DQT2_SIG),
-			DQT_POS  = std::min(DQT1_POS, DQT2_POS);
-
-		image_file_vec.erase(image_file_vec.begin(), image_file_vec.begin() + DQT_POS);
-		// ------------
-	
 		constexpr uint8_t 
 			COMPATIBLE_IMAGE_VAL = 0x19,
 			JIFF_SIG_LENGTH = 20;
-		
-		constexpr std::array<uint8_t, JIFF_SIG_LENGTH> JFIF_SIG	{ 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00 };
-	
-		image_file_vec.insert(image_file_vec.begin(), JFIF_SIG.begin(), JFIF_SIG.end());
 
-		std::vector<uint8_t>image_file_vec_copy;
-		image_file_vec_copy = image_file_vec;
-	
 		bool 
 			shouldDecreaseVals = false,
 			isImageModified = false;
-
-		std::cout << '\n';
-
+		
+		std::vector<uint8_t>image_file_vec_copy;
+		
 		if  (image_file_vec[0x0D] != COMPATIBLE_IMAGE_VAL) {	
 
-			uint8_t quality_val = 97;	
-			uint16_t 
-				decrease_attempts = 300,
-				decrease_dims_val = 0;
+			int quality_val = 97, decrease_attempts = 300, decrease_dims_val = 0;
 
-			std::cout << "Checking cover image for comment-block close sequences \"#>\" (0x23, 0x3E).\n\n"
-			  		<< "Image quality & dimensions will be reduced in an attempt to remove these sequences.\n\n";
+			std::cout << "\nChecking cover image for comment-block close sequences \"#>\" (0x23, 0x3E).\n\n"
+			  		<< "Image quality & dimensions will be reduced in an attempt to remove them.\n\n";
 
 			resizeImage(image_file_vec, quality_val, decrease_dims_val, shouldDecreaseVals);
-		
+			
+			// Save some more space:
+			// Safely remove superfluous segments from cover image. (EXIF, ICC color profile, etc).
+			auto eraseAppSegment = [](std::vector<uint8_t>& v, std::span<const uint8_t> sig) {
+    			auto pos = searchSig(v, sig);
+    			if (!pos) return;
+    			if (*pos + 3 >= v.size()) return;
+
+    			uint16_t block_len = (static_cast<uint16_t>(v[*pos + 2]) << 8) | static_cast<uint16_t>(v[*pos + 3]);
+    			size_t erase_end = *pos + 2 + block_len;
+    			if (erase_end > v.size()) return;
+
+    			v.erase(v.begin() + *pos, v.begin() + erase_end);
+			};
+			
+			constexpr std::array<uint8_t, 2>
+				COMMENT_BLOCK_SIG 	{ 0x23, 0x3E },
+				APP1_EXIF_SIG 		{ 0xFF, 0xE1 }, 
+				APP2_ICC_SIG  		{ 0xFF, 0xE2 }; 
+
+			constexpr std::array<uint8_t, 4>
+				DQT1_SIG { 0xFF, 0xDB, 0x00, 0x43 },	// Define Quantization Tables SIG.
+				DQT2_SIG { 0xFF, 0xDB, 0x00, 0x84 };
+				
+			eraseAppSegment(image_file_vec, std::span<const uint8_t>(APP1_EXIF_SIG));
+			eraseAppSegment(image_file_vec, std::span<const uint8_t>(APP2_ICC_SIG));
+
+    		auto dqt1 = searchSig(image_file_vec, std::span<const uint8_t>(DQT1_SIG));
+    		auto dqt2 = searchSig(image_file_vec, std::span<const uint8_t>(DQT2_SIG));
+
+			if (!dqt1 && !dqt2) {
+    			throw std::runtime_error("Image File Error: No DQT segment found (corrupt or unsupported JPG).");
+			}
+
+			const size_t NPOS = static_cast<size_t>(-1);
+			size_t dqt_pos = std::min(dqt1.value_or(NPOS), dqt2.value_or(NPOS));
+			image_file_vec.erase(image_file_vec.begin(), image_file_vec.begin() + static_cast<std::ptrdiff_t>(dqt_pos));
+			// ------------
+
+			constexpr std::array<uint8_t, JIFF_SIG_LENGTH> JFIF_SIG	{ 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00 };
+	
+			image_file_vec.insert(image_file_vec.begin(), JFIF_SIG.begin(), JFIF_SIG.end());
+
+			image_file_size = image_file_vec.size();  // Get updated cover image size after image re-encode, removing superfluous segments & trailing data.
+			
+			image_file_vec_copy = image_file_vec;
+	
 			isImageModified = true;
 
-			uint32_t comment_block_pos = searchSig(image_file_vec, COMMENT_BLOCK_SIG);
-
+			auto index_opt = searchSig(image_file_vec, COMMENT_BLOCK_SIG);
+			
 			shouldDecreaseVals = true;
 
-			while(comment_block_pos != image_file_vec.size()) {
+			while(index_opt) {
 				std::vector<uint8_t>().swap(image_file_vec);
 				image_file_vec = image_file_vec_copy; 
 
@@ -371,8 +527,8 @@ int main(int argc, char** argv) {
 				
 				resizeImage(image_file_vec, quality_val, decrease_dims_val, shouldDecreaseVals);
 
-				comment_block_pos = searchSig(image_file_vec, COMMENT_BLOCK_SIG);
-
+				index_opt = searchSig(image_file_vec, COMMENT_BLOCK_SIG);
+				
 				if (!decrease_attempts) {
 		  			std::cerr << "\n\nImage Compatibility Error:\n\nProcedure failed to remove close-comment block sequences from cover image.\n";
 			  		throw std::runtime_error("Try another image or use an editor such as GIMP to manually reduce (scale) image dimensions.");
@@ -382,7 +538,7 @@ int main(int argc, char** argv) {
 
 		std::vector<uint8_t>().swap(image_file_vec_copy);
 
-		std::cout << '\n';
+		if (shouldDecreaseVals) std::cout << '\n';
 
 		constexpr std::array<uint8_t, 11>
 			DEFAULT_BYTES 	{ 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x23, 0x3E, 0x0D, 0x23, 0x9e },
@@ -526,9 +682,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 	catch (const std::runtime_error& e) {
-    	std::cerr << "\n" << e.what() << "\n\n";
+        std::cerr << "\n" << e.what() << "\n\n";
         return 1;
     }
 }
-
-
