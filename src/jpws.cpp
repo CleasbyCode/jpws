@@ -296,6 +296,7 @@ static void normalize_orientation(std::vector<uint8_t>& rgb, int& w, int& h, int
     }
 }
 
+// Use Turbojpeg to re-encode JPG image and (if shouldDecreaseVals = true) use library stb_image_resize2, to resize image. 
 static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, int decrease_dims_val, bool shouldDecreaseVals) {
 	tjhandle decompressor = tjInitDecompress();
     if (!decompressor) {
@@ -304,26 +305,34 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
 
     int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
 
-    if (tjDecompressHeader3(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
-        tjDestroy(decompressor);
-        throw std::runtime_error(std::string("tjDecompressHeader3: ") + tjGetErrorStr());
+    const unsigned char* JPG_IN = reinterpret_cast<const unsigned char*>(image_file_vec.data());
+
+    if (tjDecompressHeader3(decompressor, JPG_IN, static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
+    	std::string err = tjGetErrorStr2(decompressor);
+    	tjDestroy(decompressor);
+    	throw std::runtime_error(std::string("tjDecompressHeader3: ") + err);
     }
 
     if (width < decrease_dims_val || height < decrease_dims_val) {
-        tjDestroy(decompressor);
+    	tjDestroy(decompressor);
         throw std::runtime_error("Image is too small to decrease by 1 pixel.");
     }
+    
+    const int 
+    	PIXEL_FORMAT = TJPF_BGR,
+		BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];	
 
-    const int channels = 3;
-    std::vector<uint8_t> decoded_image_vec(width * height * channels);
+    std::vector<uint8_t> decoded_image_vec(static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(BYTES_PER_PIXEL));
 
-    if (tjDecompress2(decompressor, image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, TJPF_RGB, 0) != 0) {
+    if (tjDecompress2(decompressor, JPG_IN, static_cast<unsigned long>(image_file_vec.size()), reinterpret_cast<unsigned char*>(decoded_image_vec.data()), width, 0, height, PIXEL_FORMAT, 0) != 0) {
+    	std::string err = tjGetErrorStr2(decompressor);
     	tjDestroy(decompressor);
-        throw std::runtime_error(std::string("tjDecompress2: ") + tjGetErrorStr());
+    	throw std::runtime_error(std::string("tjDecompress2: ") + err);
     }
 
     tjDestroy(decompressor);
     
+    // Correct image orientation if required.
     if (!shouldDecreaseVals) {
     	auto ori = exif_orientation(image_file_vec);
    		if (ori && *ori != 1) {
@@ -332,6 +341,7 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
    	}
    
     int newWidth = 0, newHeight = 0;
+    std::vector<uint8_t> resized_image_vec;
     
     if (shouldDecreaseVals) {
     	newWidth  = width  - decrease_dims_val;
@@ -339,41 +349,42 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
         
         std::cout << "\r" << std::string(44, ' ') << "\r"; 
     	std::cout << "Quality: " << (int)quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush; 
+    	
+    	resized_image_vec.resize(static_cast<size_t>(newWidth) * static_cast<size_t>(newHeight) * static_cast<size_t>(BYTES_PER_PIXEL));
+
+   		if (!stbir_resize_uint8_srgb(reinterpret_cast<unsigned char*>(decoded_image_vec.data()), width, height, 0, 
+    		reinterpret_cast<unsigned char*>(resized_image_vec.data()), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
+    		throw std::runtime_error("stbir_resize_uint8_srgb failed.");
+    	}	
     } else {
     	newWidth  = width;
         newHeight = height;
     }
    
-    std::vector<uint8_t> resized_image_vec(newWidth * newHeight * channels);
-
-    if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(channels))) {
-    	throw std::runtime_error("stbir_resize_uint8_srgb failed.");
-    }
-
-    tjhandle compressor = tjInitCompress();
-    if (!compressor) {
-        throw std::runtime_error("tjInitCompress() failed.");
-    }
+    tjhandle compressor = tjInitCompress(); 
+    if (!compressor) throw std::runtime_error("tjInitCompress() failed.");
 
     unsigned char* jpegBuf  = nullptr;
     unsigned long  jpegSize = 0;
     
-    int subsamp = TJSAMP_444, flags = 0;
-   
-    flags |= TJFLAG_PROGRESSIVE;
-   
-    flags |= (quality_val >= 90 ? TJFLAG_FASTDCT : TJFLAG_ACCURATEDCT);
-   
-    if (tjCompress2(compressor, resized_image_vec.data(), newWidth, 0, newHeight, TJPF_RGB, &jpegBuf, &jpegSize, subsamp, quality_val, flags) != 0) {
+    int 
+    	subsamp = TJSAMP_444,
+    	flags = TJFLAG_PROGRESSIVE | TJFLAG_ACCURATEDCT;
+    
+    unsigned char* vec = reinterpret_cast<unsigned char*>((shouldDecreaseVals ? resized_image_vec.data() : decoded_image_vec.data()));
+    
+    if (tjCompress2(compressor, vec, newWidth, 0, newHeight, PIXEL_FORMAT, &jpegBuf, &jpegSize, subsamp, quality_val, flags) != 0) {
+    	if (jpegBuf) { tjFree(jpegBuf); jpegBuf = nullptr; }
+    	std::string err = tjGetErrorStr2(compressor);
     	tjDestroy(compressor);
-        throw std::runtime_error(std::string("tjCompress2: ") + tjGetErrorStr());
+    	throw std::runtime_error(std::string("tjCompress2: ") + err);
     }
-
-    tjDestroy(compressor);
-
+   
     std::vector<uint8_t> output_image_vec(jpegBuf, jpegBuf + jpegSize);
+    
+    tjDestroy(compressor);
     tjFree(jpegBuf);
-
+    
     image_file_vec.swap(output_image_vec);
 }
 
@@ -686,3 +697,4 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
