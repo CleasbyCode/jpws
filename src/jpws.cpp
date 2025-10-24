@@ -238,65 +238,72 @@ static std::optional<uint16_t> exif_orientation(const std::vector<uint8_t>& jpg)
     return std::nullopt;
 }
 
-static void rotate_rgb_180(std::vector<uint8_t>& rgb, int w, int h) {
-	const int stride = w * 3;
-	for (int y = 0; y < h / 2; ++y) {
-    	int opp = h - 1 - y;
+// Generic rotate helpers for bpp = 3 or 4
+static void rotate_px_180(std::vector<uint8_t>& px, int w, int h, int bpp) {
+    const size_t stride = (size_t)w * bpp;
+    for (int y = 0; y < h / 2; ++y) {
+        int opp = h - 1 - y;
         for (int x = 0; x < w; ++x) {
-        	for (int c = 0; c < 3; ++c)
-                std::swap(rgb[y*stride + x*3 + c], rgb[opp*stride + (w-1-x)*3 + c]);
+            size_t a = (size_t)y   * stride + (size_t)x        * bpp;
+            size_t b = (size_t)opp * stride + (size_t)(w-1-x)  * bpp;
+            for (int c = 0; c < bpp; ++c) std::swap(px[a + c], px[b + c]);
         }
     }
-    if (h % 2 == 1) {
-    	int y = h/2;
-        for (int x = 0; x < w/2; ++x)
-            for (int c = 0; c < 3; ++c)
-                std::swap(rgb[y*stride + x*3 + c], rgb[y*stride + (w-1-x)*3 + c]);
+    if (h & 1) { // middle row if odd height
+        int y = h / 2;
+        for (int x = 0; x < w / 2; ++x) {
+            size_t a = (size_t)y * stride + (size_t)x       * bpp;
+            size_t b = (size_t)y * stride + (size_t)(w-1-x) * bpp;
+            for (int c = 0; c < bpp; ++c) std::swap(px[a + c], px[b + c]);
+        }
     }
 }
 
-static void rotate_rgb_90cw(std::vector<uint8_t>& rgb, int& w, int& h) {
-	std::vector<uint8_t> out(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
-    int nw = h;
+static void rotate_px_90cw(std::vector<uint8_t>& px, int& w, int& h, int bpp) {
+    const int nw = h, nh = w;
+    std::vector<uint8_t> out((size_t)nw * nh * bpp);
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-        	int nx = h - 1 - y, ny = x;
-            for (int c = 0; c < 3; ++c)
-                out[(static_cast<size_t>(ny) * nw + nx) * 3 + c] = rgb[(static_cast<size_t>(y) * w + x) * 3 + c];
+            int nx = h - 1 - y, ny = x; // (x,y) -> (nx,ny)
+            size_t di = ((size_t)ny * nw + (size_t)nx) * bpp;
+            size_t si = ((size_t)y  * w  + (size_t)x ) * bpp;
+            for (int c = 0; c < bpp; ++c) out[di + c] = px[si + c];
         }
     }
-    rgb.swap(out);
-    std::swap(w, h);
+    px.swap(out);
+    w = nw; h = nh;
 }
 
-static void rotate_rgb_270cw(std::vector<uint8_t>& rgb, int& w, int& h) {
-    std::vector<uint8_t> out(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
-    int nw = h;
+static void rotate_px_270cw(std::vector<uint8_t>& px, int& w, int& h, int bpp) {
+    const int nw = h, nh = w;
+    std::vector<uint8_t> out((size_t)nw * nh * bpp);
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            int nx = y, ny = w - 1 - x;
-            for (int c = 0; c < 3; ++c)
-                out[(static_cast<size_t>(ny) * nw + nx) * 3 + c] = rgb[(static_cast<size_t>(y) * w + x) * 3 + c];
+            int nx = y, ny = w - 1 - x; // (x,y) -> (nx,ny)
+            size_t di = ((size_t)ny * nw + (size_t)nx) * bpp;
+            size_t si = ((size_t)y  * w  + (size_t)x ) * bpp;
+            for (int c = 0; c < bpp; ++c) out[di + c] = px[si + c];
         }
     }
-    rgb.swap(out);
-    std::swap(w, h);
+    px.swap(out);
+    w = nw; h = nh;
 }
 
 // If exif_orientation found an Orientation tag, use normalize_orientation 
-// and its above helpers to normalize the pixels, so that we can later safely remove
+// and its above helpers to normalize the pixels (bbp = 3 or 4), so that we can later safely remove
 // the EXIF segment from the cover image and have correct orientation with viewers.
 // Minimal mapper: handle 3,6,8 (most common). Add flips (2,4,5,7)...
-static void normalize_orientation(std::vector<uint8_t>& rgb, int& w, int& h, int ori) {
-	switch (ori) {
-    	case 3: rotate_rgb_180(rgb, w, h); break;
-        case 6: rotate_rgb_90cw(rgb, w, h); break;
-        case 8: rotate_rgb_270cw(rgb, w, h); break;
-        default: /* 1 or unsupported -> do nothing */ break;
+static void normalize_orientation(std::vector<uint8_t>& px, int& w, int& h, int ori, int bpp) {
+    switch (ori) {
+        case 3: rotate_px_180(px, w, h, bpp);   break; // 180°
+        case 6: rotate_px_90cw(px,  w, h, bpp); break; // 90° CW
+        case 8: rotate_px_270cw(px, w, h, bpp); break; // 270° CW
+        default: break; // 1 or unsupported: no-op
     }
 }
 
 // Use Turbojpeg to re-encode JPG image and (if shouldDecreaseVals = true) use library stb_image_resize2, to resize image. 
+// Continue to resize and reduce image quality until comment-block close sequence characters removed from image, or max 300 repeats results in failure.
 static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, int decrease_dims_val, bool shouldDecreaseVals) {
 	tjhandle decompressor = tjInitDecompress();
     if (!decompressor) {
@@ -319,7 +326,7 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
     }
     
     const int 
-    	PIXEL_FORMAT = TJPF_BGR,
+    	PIXEL_FORMAT = TJPF_XBGR,
 		BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];	
 
     std::vector<uint8_t> decoded_image_vec(static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(BYTES_PER_PIXEL));
@@ -330,11 +337,11 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
     	throw std::runtime_error(std::string("tjDecompress2: ") + err);
     }
 	
-    // Correct image orientation if required.
+    // Correct image orientation if required (exif).
     if (!shouldDecreaseVals) {
     	auto ori = exif_orientation(image_file_vec);
    		if (ori && *ori != 1) {
-   			normalize_orientation(decoded_image_vec, width, height, *ori);
+   			normalize_orientation(decoded_image_vec, width, height, *ori, BYTES_PER_PIXEL);
 		}
    	}
 
@@ -697,6 +704,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
 
 
