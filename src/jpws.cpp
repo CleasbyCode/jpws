@@ -381,9 +381,9 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
     }
    
     std::vector<uint8_t> output_image_vec(jpegBuf, jpegBuf + jpegSize);
-    
-    tjDestroy(compressor);
+	
     tjFree(jpegBuf);
+    tjDestroy(compressor);
     
     image_file_vec.swap(output_image_vec);
 }
@@ -697,4 +697,5 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
