@@ -329,9 +329,7 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
     	tjDestroy(decompressor);
     	throw std::runtime_error(std::string("tjDecompress2: ") + err);
     }
-
-    tjDestroy(decompressor);
-    
+	
     // Correct image orientation if required.
     if (!shouldDecreaseVals) {
     	auto ori = exif_orientation(image_file_vec);
@@ -339,7 +337,9 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
    			normalize_orientation(decoded_image_vec, width, height, *ori);
 		}
    	}
-   
+
+	tjDestroy(decompressor);
+	
     int newWidth = 0, newHeight = 0;
     std::vector<uint8_t> resized_image_vec;
     
@@ -697,5 +697,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
 
