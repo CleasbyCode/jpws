@@ -1,4 +1,4 @@
-// JPG-PowerShell Polyglot for X-Twitter (jpws v1.5) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
+// JPG-PowerShell Polyglot for X-Twitter (jpws v1.6) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
 
 // CLI source code (Linux / Windows).
 
@@ -53,7 +53,7 @@ namespace fs = std::filesystem;
 static void displayInfo() {
 	std::cout << R"(
 
-JPG-PowerShell Polyglot for X-Twitter (jpws v1.5)
+JPG-PowerShell Polyglot for X-Twitter (jpws v1.6)
 Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024 
 
 CLI tool for embedding a PowerShell script within a JPG image, 
@@ -704,6 +704,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
 
 
