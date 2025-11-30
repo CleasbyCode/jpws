@@ -1,4 +1,4 @@
-// JPG-PowerShell Polyglot for X-Twitter (jpws v1.6) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
+// JPG-PowerShell Polyglot for X-Twitter (jpws v1.7) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
 
 // CLI source code (Linux / Windows).
 
@@ -50,10 +50,13 @@
 
 namespace fs = std::filesystem;
 
+using Byte   = std::uint8_t;
+using vBytes = std::vector<Byte>;
+
 static void displayInfo() {
 	std::cout << R"(
 
-JPG-PowerShell Polyglot for X-Twitter (jpws v1.6)
+JPG-PowerShell Polyglot for X-Twitter (jpws v1.7)
 Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024 
 
 CLI tool for embedding a PowerShell script within a JPG image, 
@@ -169,16 +172,17 @@ static bool hasFileExtension(const fs::path& p, std::initializer_list<const char
     return false;
 }
 
-// searchSig function searches a byte vector (uint8_t) for a fixed byte pattern and returns the offset of the first match, or std::nullopt if there’s no match.
-// It uses std::search on v.begin().. v.end() with the pattern given by sig.begin().. sig.end(). 
-	
-// The std::span<const uint8_t> parameter lets you pass anything contiguous - std::array, C-array, another std::vector, or a subrange, without copying. 
-// If std::search returns v.end(), the function maps that to std::nullopt; otherwise it converts the iterator difference to a size_t index.
-// I often then convert the size_t index result to uint32_t for compatibiblty reasons for other parts of the program.
-static std::optional<size_t> searchSig(const std::vector<uint8_t>& v, std::span<const uint8_t> sig) {
-	auto it = std::search(v.begin(), v.end(), sig.begin(), sig.end());
-	if (it == v.end()) return std::nullopt;
-	return static_cast<size_t>(it - v.begin());
+// Default limit of 0 means "Search Whole File". 
+// Any other value means "Search ONLY up to this limit".
+static std::optional<std::size_t> searchSig(const vBytes& v, std::span<const Byte> sig, std::size_t limit = 0) {   
+	auto end_it = (limit == 0 || limit > v.size()) 
+    	? v.end() 
+    	: v.begin() + limit;
+
+    auto it = std::search(v.begin(), end_it, sig.begin(), sig.end());
+    
+    if (it == end_it) return std::nullopt;
+    return static_cast<std::size_t>(it - v.begin());
 }
 
 // First search for an EXIF segment, if found search for an Orientation tag.
@@ -375,9 +379,9 @@ static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, i
     unsigned long  jpegSize = 0;
     
     int 
-    	subsamp = TJSAMP_444,
+    	subsamp = TJSAMP_420,
     	flags = TJFLAG_PROGRESSIVE | TJFLAG_ACCURATEDCT;
-    
+    	
     unsigned char* vec = reinterpret_cast<unsigned char*>((shouldDecreaseVals ? resized_image_vec.data() : decoded_image_vec.data()));
     
     if (tjCompress2(compressor, vec, newWidth, 0, newHeight, PIXEL_FORMAT, &jpegBuf, &jpegSize, subsamp, quality_val, flags) != 0) {
@@ -420,15 +424,15 @@ int main(int argc, char** argv) {
     		throw std::runtime_error("Read File Error: Unable to read image file. Check the filename and try again.");
    		}
 		
-		uintmax_t image_file_size = fs::file_size(args.image_file_path);
+		std::size_t image_file_size = fs::file_size(args.image_file_path);
 
-    	constexpr uint8_t MIN_IMAGE_SIZE = 134;
+    	constexpr std::size_t 
+    		MIN_IMAGE_SIZE = 134ULL,
+    		MAX_IMAGE_SIZE = 4ULL * 1024 * 1024;
 
     	if (MIN_IMAGE_SIZE > image_file_size) {
         	throw std::runtime_error("Image File Error: Invalid file size.");
     	}
-
-    	constexpr uintmax_t MAX_IMAGE_SIZE = 4 * 1024 * 1024;
     
     	if (image_file_size > MAX_IMAGE_SIZE) {
    			throw std::runtime_error("Image Size Error: Size of cover image exceeds maximum size limit.");
@@ -439,13 +443,13 @@ int main(int argc, char** argv) {
 		image_file_ifs.read(reinterpret_cast<char*>(image_file_vec.data()), image_file_size);
 		image_file_ifs.close();
 
-		constexpr uint8_t 
-			COMPATIBLE_IMAGE_VAL = 0x19,
-			JIFF_SIG_LENGTH = 20;
+		constexpr uint8_t COMPATIBLE_IMAGE_VAL = 0x19;
+		
+		constexpr std::size_t JIFF_SIG_LENGTH = 20ULL;
 
 		bool 
 			shouldDecreaseVals = false,
-			isImageModified = false;
+			isImageModified    = false;
 		
 		std::vector<uint8_t>image_file_vec_copy;
 		
@@ -458,24 +462,33 @@ int main(int argc, char** argv) {
 
 			resizeImage(image_file_vec, quality_val, decrease_dims_val, shouldDecreaseVals);
 			
-			constexpr std::array<uint8_t, 4>
-				DQT1_SIG { 0xFF, 0xDB, 0x00, 0x43 },	// Define Quantization Tables SIG.
-				DQT2_SIG { 0xFF, 0xDB, 0x00, 0x84 };
-				
+			constexpr size_t DQT_SEARCH_LIMIT = 100ULL;   
+          
+    		constexpr auto COMMENT_BLOCK_SIG = std::to_array<Byte>({ 0x23, 0x3E });
+    			 
+    		constexpr auto 
+    			DQT1_SIG = std::to_array<Byte>({ 0xFF, 0xDB, 0x00, 0x43 }),    
+        		DQT2_SIG = std::to_array<Byte>({ 0xFF, 0xDB, 0x00, 0x84 });
+                
     		auto 
-				dqt1 = searchSig(image_file_vec, std::span<const uint8_t>(DQT1_SIG)),
-    			dqt2 = searchSig(image_file_vec, std::span<const uint8_t>(DQT2_SIG));
+    			dqt1 = searchSig(image_file_vec, std::span<const Byte>(DQT1_SIG), DQT_SEARCH_LIMIT),
+        		dqt2 = searchSig(image_file_vec, std::span<const Byte>(DQT2_SIG), DQT_SEARCH_LIMIT);
 
-			if (!dqt1 && !dqt2) {
+    		if (!dqt1 && !dqt2) {
     			throw std::runtime_error("Image File Error: No DQT segment found (corrupt or unsupported JPG).");
-			}
+   			}
 
-			const size_t NPOS = static_cast<size_t>(-1);
-			size_t dqt_pos = std::min(dqt1.value_or(NPOS), dqt2.value_or(NPOS));
-			image_file_vec.erase(image_file_vec.begin(), image_file_vec.begin() + static_cast<std::ptrdiff_t>(dqt_pos));
-			// ------------
+    		const std::size_t NPOS = static_cast<std::size_t>(-1);
+            
+    		std::size_t dqt_pos = std::min(dqt1.value_or(NPOS), dqt2.value_or(NPOS));
+            
+    		// Erase everything before DQT.
+    		// This leaves the cover image with NO Start of Image (SOI) marker. 
+    		// We will write this back later... 
+	
+    		image_file_vec.erase(image_file_vec.begin(), image_file_vec.begin() + static_cast<std::ptrdiff_t>(dqt_pos));
 
-			constexpr std::array<uint8_t, JIFF_SIG_LENGTH> JFIF_SIG	{ 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00 };
+			constexpr auto JFIF_SIG	= std::to_array<Byte>({ 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00 });
 	
 			image_file_vec.insert(image_file_vec.begin(), JFIF_SIG.begin(), JFIF_SIG.end());
 
@@ -485,7 +498,7 @@ int main(int argc, char** argv) {
 	
 			isImageModified = true;
 
-			auto index_opt = searchSig(image_file_vec, COMMENT_BLOCK_SIG);
+			auto index_opt = searchSig(image_file_vec, std::span<const Byte>(COMMENT_BLOCK_SIG));
 			
 			shouldDecreaseVals = true;
 
@@ -512,9 +525,9 @@ int main(int argc, char** argv) {
 
 		if (shouldDecreaseVals) std::cout << '\n';
 
-		constexpr std::array<uint8_t, 11>
-			DEFAULT_BYTES 	{ 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x23, 0x3E, 0x0D, 0x23, 0x9e },
-			ALT_BYTES		{ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }; 
+		constexpr auto 
+			DEFAULT_BYTES = std::to_array<Byte>({ 0x00, 0x00, 0x20, 0x20, 0x00, 0x00, 0x23, 0x3E, 0x0D, 0x23, 0x9e }),
+			ALT_BYTES 	  = std::to_array<Byte>({ 0x9e, 0x23, 0x3e, 0x0d, 0x23, 0x00, 0x00, 0x20, 0x20, 0x00, 0x00 }); 
 
 		if (args.option == Option::Alt) {
 			std::copy(ALT_BYTES.rbegin(), ALT_BYTES.rend(), image_file_vec.rbegin() + 2);
@@ -522,7 +535,7 @@ int main(int argc, char** argv) {
 			std::copy(DEFAULT_BYTES.rbegin(), DEFAULT_BYTES.rend(), image_file_vec.rbegin() + 2);
 		}
 	
-		constexpr uint8_t PWSH_INSERT_INDEX = 6;
+		constexpr std::size_t PWSH_INSERT_INDEX = 6ULL;
 			
 		if (!fs::exists(args.pwsh_file_path)) {
         	throw std::runtime_error("Script File Error: PowerShell script file not found.");
@@ -544,9 +557,9 @@ int main(int argc, char** argv) {
 		
 		uintmax_t pwsh_file_size = fs::file_size(args.pwsh_file_path);
 		
-		constexpr uint16_t MAX_PWSH_SIZE = 10ULL * 1024;
-
-    	constexpr uint8_t MIN_PWSH_SIZE = 10;
+		constexpr std::size_t 
+			MAX_PWSH_SIZE = 10ULL * 1024,
+			MIN_PWSH_SIZE = 10ULL;
 	
 		if (MIN_PWSH_SIZE > pwsh_file_size) {
         	throw std::runtime_error("PowerShell File Error: Invalid file size.");
@@ -561,13 +574,13 @@ int main(int argc, char** argv) {
 		pwsh_file_ifs.read(reinterpret_cast<char*>(pwsh_file_vec.data()), pwsh_file_size);
 		pwsh_file_ifs.close();
 			
-		constexpr std::array<uint8_t, 3> BOM_SIG { 0xEF, 0xBB, 0xBF };
+		constexpr auto BOM_SIG = std::to_array<Byte>({ 0xEF, 0xBB, 0xBF });
 	
 		if (std::equal(BOM_SIG.begin(), BOM_SIG.end(), pwsh_file_vec.begin())) {
         	pwsh_file_vec.erase(pwsh_file_vec.begin(), pwsh_file_vec.begin() + 3);
         }		
 	
-		std::vector<uint8_t>profile_vec = { 
+		vBytes profile_vec = { 
 			0xFF, 0xE2, 0x00, 0x00, 0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x5F, 0x6A, 0x70, 0x77, 
 			0x73, 0x5F, 0x00, 0x00, 0x6D, 0x6E, 0x74, 0x72, 0x52, 0x47, 0x42, 0x20, 0x58, 0x59, 0x5A, 0x20, 0x07, 0xE2, 0x00, 0x03, 0x00, 0x14, 0x00, 0x09, 0x00, 0x0E, 
 			0x00, 0x1D, 0x61, 0x63, 0x73, 0x70, 0x4D, 0x53, 0x46, 0x54, 0x00, 0x00, 0x00, 0x00, 0x73, 0x61, 0x77, 0x73, 0x63, 0x74, 0x72, 0x6C, 0x00, 0x00, 0x00, 0x00, 
@@ -589,10 +602,11 @@ int main(int argc, char** argv) {
 	
 		profile_vec.insert(profile_vec.end() - PWSH_INSERT_INDEX, pwsh_file_vec.begin(), pwsh_file_vec.end());
 
-		std::vector<uint8_t>().swap(pwsh_file_vec);
+		vBytes().swap(pwsh_file_vec);
 
-		uint8_t
-			bits = 16,	
+		Byte bits = 16;
+		
+		std::size_t
 			jfif_comment_block_index = 0x0C,					
 			segment_size_field_index = 0x16,
 			profile_size_field_index = 0x26;		
@@ -601,7 +615,7 @@ int main(int argc, char** argv) {
 			SEGMENT_SIZE = (profile_vec.size() + JIFF_SIG_LENGTH) - segment_size_field_index,
 			PROFILE_SIZE = SEGMENT_SIZE - bits;
 	
-		constexpr uint16_t MAX_POWERSHELL_FILE_SIZE = 10 * 1024; 
+		constexpr std::size_t MAX_POWERSHELL_FILE_SIZE = 10ULL * 1024; 
 
 		if (SEGMENT_SIZE > MAX_POWERSHELL_FILE_SIZE) {
 			throw std::runtime_error("Segment Size Error: The profile segment (FFE2) exceeds the maximum size limit of 10KB.");
@@ -609,7 +623,7 @@ int main(int argc, char** argv) {
 
 		image_file_vec.insert(image_file_vec.begin() + JIFF_SIG_LENGTH , profile_vec.begin(), profile_vec.end());
 		
-		std::vector<uint8_t>().swap(profile_vec);
+		vBytes().swap(profile_vec);
 
 		while (bits) {
 			image_file_vec[segment_size_field_index++] = (SEGMENT_SIZE >> (bits -= 8)) & 0xFF;
@@ -621,7 +635,7 @@ int main(int argc, char** argv) {
 			image_file_vec[profile_size_field_index++] = (PROFILE_SIZE >> (bits -= 8)) & 0xFF;
 		}
 	
-		constexpr std::array<uint8_t, 6> JFIF_COMMENT_BLOCK {0x58, 0x54, 0x57, 0x0A, 0x3C, 0x23};
+		constexpr auto JFIF_COMMENT_BLOCK = std::to_array<Byte>({0x58, 0x54, 0x57, 0x0A, 0x3C, 0x23});
 
 		std::copy(JFIF_COMMENT_BLOCK.begin(), JFIF_COMMENT_BLOCK.end(), image_file_vec.begin() + jfif_comment_block_index);
 
@@ -637,7 +651,7 @@ int main(int argc, char** argv) {
 			throw std::runtime_error("Write Error: Unable to write to file.");
 		}
 	
-		const uint32_t IMAGE_SIZE = static_cast<uint32_t>(image_file_vec.size());
+		const std::size_t IMAGE_SIZE = image_file_vec.size();
 
 		file_ofs.write(reinterpret_cast<const char*>(image_file_vec.data()), IMAGE_SIZE);
 		file_ofs.close();
@@ -658,9 +672,3 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
-
-
-
-
-
-
