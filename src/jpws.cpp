@@ -92,57 +92,45 @@ https://github.com/CleasbyCode/jpws
 enum class Option : unsigned char { None, Alt };
 
 struct ProgramArgs {
-	Option option{Option::None};
-
-	fs::path image_file_path;
-	fs::path pwsh_file_path;
+    Option option{Option::None};
+    fs::path image_file_path;
+    fs::path pwsh_file_path;
     
-	static std::optional<ProgramArgs> parse(int argc, char** argv) {
-		using std::string_view;
-
-        auto arg = [&](int i) -> string_view {
-			return (i >= 0 && i < argc) ? string_view(argv[i]) : string_view{};
-        };
-
-        const std::string prog = fs::path(argv[0]).filename().string();
-        const std::string USAGE =
-        	"Usage: " + prog + " [-alt] <cover_image> <powershell_script>\n\t\b"
-            	+ prog + " --info";
-            
-        auto die = [&]() -> void {
-        	throw std::runtime_error(USAGE);
-        };
-
-        if (argc < 2) die();
-
-        if (argc == 2 && arg(1) == "--info") {
-        	displayInfo();
-        	return std::nullopt;
-        }
-
-		ProgramArgs out{};
-
-        const string_view opt = arg(1);
-
-        if (opt == "-alt") {
-        	int i = 2;
-        	
-            if (argc != 4) die();
-
-            out.image_file_path = fs::path(arg(i));
-            out.pwsh_file_path  = fs::path(arg(i + 1));
-            out.option = Option::Alt;
-            return out;
-        } else {
-        	if (argc != 3) die();
-        	out.image_file_path = fs::path(arg(1));
-            out.pwsh_file_path  = fs::path(arg(2));
-            return out;
-        }
-        die();
-        return out; // Keeps compiler happy.
-    }
+    static std::optional<ProgramArgs> parse(int argc, char** argv); 
 };
+
+std::optional<ProgramArgs> ProgramArgs::parse(int argc, char** argv) { 
+    using std::string_view;
+    auto arg = [&](int i) -> string_view {
+        return (i >= 0 && i < argc) ? string_view(argv[i]) : string_view{};
+    };
+    const std::string prog = fs::path(argv[0]).filename().string();
+    const std::string USAGE =
+        "Usage: " + prog + " [-alt] <cover_image> <powershell_script>\n\t\b"
+            + prog + " --info";
+        
+    auto die = [&]() -> std::optional<ProgramArgs> {
+        throw std::runtime_error(USAGE);
+    };
+    if (argc < 2) die();
+    if (argc == 2 && arg(1) == "--info") {
+        displayInfo();
+        return std::nullopt;
+    }
+    ProgramArgs out{};
+    const string_view opt = arg(1);
+    if (opt == "-alt") {
+        if (argc != 4) die();
+        out.image_file_path = fs::path(arg(2));
+        out.pwsh_file_path  = fs::path(arg(3));
+        out.option = Option::Alt;
+    } else {
+        if (argc != 3) die();
+        out.image_file_path = fs::path(arg(1));
+        out.pwsh_file_path  = fs::path(arg(2));
+    }
+    return out;
+}
 
 static bool hasValidFilename(const fs::path& p) {
 	if (p.empty()) {
@@ -185,218 +173,318 @@ static std::optional<std::size_t> searchSig(const vBytes& v, std::span<const Byt
     return static_cast<std::size_t>(it - v.begin());
 }
 
-// First search for an EXIF segment, if found search for an Orientation tag.
-// Returns 1..8 if found and passed to normalize_orientation, or std::nullopt if no EXIF/Orientation.
-static std::optional<uint16_t> exif_orientation(const std::vector<uint8_t>& jpg) {
-	const uint8_t APP1[] = {0xFF, 0xE1};
-    auto app1 = searchSig(jpg, std::span<const uint8_t>(APP1, 2));
-    if (!app1) return std::nullopt;
+[[nodiscard]] static std::optional<uint16_t> exifOrientation(const vBytes& jpg) {
+	constexpr size_t EXIF_SEARCH_LIMIT = 4096ULL;
+	constexpr auto APP1_SIG = std::to_array<Byte>({0xFF, 0xE1});
 
-    size_t p = *app1;
-    if (p + 4 > jpg.size()) return std::nullopt;
+	auto app1_pos_opt = searchSig(jpg, std::span<const Byte>(APP1_SIG), EXIF_SEARCH_LIMIT);
 
-    uint16_t len = (static_cast<uint16_t>(jpg[p+2]) << 8) | jpg[p+3];
-    size_t exif_end = p + 2 + len;            
+    if (!app1_pos_opt) return std::nullopt;
+    std::size_t pos = *app1_pos_opt;
+
+    if (pos + 4 > jpg.size()) return std::nullopt;
+
+    uint16_t segment_length = (static_cast<uint16_t>(jpg[pos + 2]) << 8) | jpg[pos + 3];
+    std::size_t exif_end = pos + 2 + segment_length;
+
     if (exif_end > jpg.size()) return std::nullopt;
 
-    size_t exif_start = p + 4;
-    if (exif_start + 6 > exif_end) return std::nullopt;
-    if (std::memcmp(&jpg[exif_start], "Exif\0\0", 6) != 0) return std::nullopt;
+    std::span<const Byte> payload(jpg.data() + pos + 4, segment_length - 2);
 
-    size_t tiff = exif_start + 6;
-    if (tiff + 8 > exif_end) return std::nullopt;
+    constexpr std::size_t EXIF_HEADER_SIZE = 6ULL;
+    constexpr auto EXIF_SIG = std::to_array<Byte>({'E', 'x', 'i', 'f', '\0', '\0'});
 
-    bool le = false;
-    if (jpg[tiff] == 'I' && jpg[tiff+1] == 'I') le = true;
-    else if (jpg[tiff] == 'M' && jpg[tiff+1] == 'M') le = false;
+    if (payload.size() < EXIF_HEADER_SIZE || 
+    	std::memcmp(payload.data(), EXIF_SIG.data(), EXIF_HEADER_SIZE) != 0) {
+        return std::nullopt;
+    }
+    
+    std::span<const Byte> tiff_data = payload.subspan(EXIF_HEADER_SIZE);
+    
+    if (tiff_data.size() < 8) return std::nullopt; 
+
+    bool is_le = false;
+    if (tiff_data[0] == 'I' && tiff_data[1] == 'I') is_le = true;      
+    else if (tiff_data[0] == 'M' && tiff_data[1] == 'M') is_le = false;
     else return std::nullopt;
 
-    auto rd16 = [&](size_t off) -> uint16_t {
-    	if (off + 1 >= exif_end) return 0;
-    	return le ? (uint16_t)(jpg[off] | (jpg[off+1] << 8)) : (uint16_t)((jpg[off] << 8) | jpg[off+1]);
-    };
-	
-    auto rd32 = [&](size_t off) -> uint32_t {
-		if (off + 3 >= exif_end) return 0;
-        return le ? (uint32_t)(jpg[off] | (jpg[off+1] << 8) | (jpg[off+2] << 16) | (jpg[off+3] << 24)) : (uint32_t)((jpg[off] << 24) | (jpg[off+1] << 16) | (jpg[off+2] << 8) | jpg[off+3]);
+    auto read16 = [&](std::size_t offset) -> uint16_t {
+    	if (offset + 2 > tiff_data.size()) return 0;
+        return is_le ? 
+            static_cast<uint16_t>(tiff_data[offset] | (tiff_data[offset + 1] << 8)) :
+            static_cast<uint16_t>((tiff_data[offset] << 8) | tiff_data[offset + 1]);
     };
 
-    if (rd16(tiff + 2) != 0x002A) return std::nullopt;
-    
-	uint32_t ifd0_off = rd32(tiff + 4);
-	
-    size_t ifd = tiff + ifd0_off;
-    if (ifd + 2 > exif_end) return std::nullopt;
-
-    uint16_t count = rd16(ifd);
-    ifd += 2;
-	
-    for (uint16_t i = 0; i < count; ++i) {
-    	size_t entry = ifd + i * 12;
-    	if (entry + 12 > exif_end) return std::nullopt;
-        uint16_t tag = rd16(entry + 0);
-        if (tag == 0x0112) {
-        	return rd16(entry + 8); // 1..8 usually. 
+    auto read32 = [&](std::size_t offset) -> uint32_t {
+        if (offset + 4 > tiff_data.size()) return 0;
+        if (is_le) {
+            return static_cast<uint32_t>(tiff_data[offset]) | 
+                   (static_cast<uint32_t>(tiff_data[offset + 1]) << 8) | 
+                   (static_cast<uint32_t>(tiff_data[offset + 2]) << 16) | 
+                   (static_cast<uint32_t>(tiff_data[offset + 3]) << 24);
+        } else {
+            return (static_cast<uint32_t>(tiff_data[offset]) << 24) | 
+                   (static_cast<uint32_t>(tiff_data[offset + 1]) << 16) | 
+                   (static_cast<uint32_t>(tiff_data[offset + 2]) << 8) | 
+                   static_cast<uint32_t>(tiff_data[offset + 3]);
         }
+    };
+
+    if (read16(2) != 0x002A) return std::nullopt;
+
+    uint32_t ifd_offset = read32(4);
+    
+    if (ifd_offset < 8 || ifd_offset >= tiff_data.size()) return std::nullopt;
+    
+    uint16_t entry_count = read16(ifd_offset);
+    std::size_t current_entry = ifd_offset + 2ULL; 
+
+    constexpr uint16_t TAG_ORIENTATION = 0x0112;
+    constexpr std::size_t ENTRY_SIZE = 12ULL;
+
+    for (uint16_t i = 0; i < entry_count; ++i) {
+    	if (current_entry + ENTRY_SIZE > tiff_data.size()) return std::nullopt;
+
+        uint16_t tag_id = read16(current_entry);
+        
+        if (tag_id == TAG_ORIENTATION) {
+            return read16(current_entry + 8);
+        }
+        current_entry += ENTRY_SIZE;
     }
     return std::nullopt;
 }
 
-// Generic rotate helpers for bpp = 3 or 4
-static void rotate_px_180(std::vector<uint8_t>& px, int w, int h, int bpp) {
-    const size_t stride = (size_t)w * bpp;
-    for (int y = 0; y < h / 2; ++y) {
-        int opp = h - 1 - y;
-        for (int x = 0; x < w; ++x) {
-            size_t a = (size_t)y   * stride + (size_t)x        * bpp;
-            size_t b = (size_t)opp * stride + (size_t)(w-1-x)  * bpp;
-            for (int c = 0; c < bpp; ++c) std::swap(px[a + c], px[b + c]);
-        }
-    }
-    if (h & 1) { // middle row if odd height
-        int y = h / 2;
-        for (int x = 0; x < w / 2; ++x) {
-            size_t a = (size_t)y * stride + (size_t)x       * bpp;
-            size_t b = (size_t)y * stride + (size_t)(w-1-x) * bpp;
-            for (int c = 0; c < bpp; ++c) std::swap(px[a + c], px[b + c]);
-        }
+// Helper: Map EXIF orientation (1-8) to TurboJPEG Transform Operations
+static int getTransformOp(uint16_t orientation) {
+    switch (orientation) {
+        case 2: return TJXOP_HFLIP;
+        case 3: return TJXOP_ROT180;
+        case 4: return TJXOP_VFLIP;
+        case 5: return TJXOP_TRANSPOSE;
+        case 6: return TJXOP_ROT90;
+        case 7: return TJXOP_TRANSVERSE;
+        case 8: return TJXOP_ROT270;
+        default: return TJXOP_NONE;
     }
 }
 
-static void rotate_px_90cw(std::vector<uint8_t>& px, int& w, int& h, int bpp) {
-    const int nw = h, nh = w;
-    std::vector<uint8_t> out((size_t)nw * nh * bpp);
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            int nx = h - 1 - y, ny = x; // (x,y) -> (nx,ny)
-            size_t di = ((size_t)ny * nw + (size_t)nx) * bpp;
-            size_t si = ((size_t)y  * w  + (size_t)x ) * bpp;
-            for (int c = 0; c < bpp; ++c) out[di + c] = px[si + c];
+// TurboJPEG. RAII wrapper for tjhandle (decompressor or compressor)
+struct TJHandle {
+	tjhandle handle = nullptr;
+
+    TJHandle() = default;
+
+    TJHandle(const TJHandle&) = delete;
+   	TJHandle& operator=(const TJHandle&) = delete;
+
+    TJHandle(TJHandle&& other) noexcept : handle(other.handle) {
+        other.handle = nullptr;
+    }
+    
+    TJHandle& operator=(TJHandle&& other) noexcept {
+    	if (this != &other) {
+        	reset();
+            handle = other.handle;
+            other.handle = nullptr;
+        }
+        return *this;
+    }
+
+    ~TJHandle() {
+        reset();
+    }
+
+    void reset() {
+        if (handle) {
+        	tjDestroy(handle);
+            handle = nullptr;
         }
     }
-    px.swap(out);
-    w = nw; h = nh;
-}
 
-static void rotate_px_270cw(std::vector<uint8_t>& px, int& w, int& h, int bpp) {
-    const int nw = h, nh = w;
-    std::vector<uint8_t> out((size_t)nw * nh * bpp);
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            int nx = y, ny = w - 1 - x; // (x,y) -> (nx,ny)
-            size_t di = ((size_t)ny * nw + (size_t)nx) * bpp;
-            size_t si = ((size_t)y  * w  + (size_t)x ) * bpp;
-            for (int c = 0; c < bpp; ++c) out[di + c] = px[si + c];
-        }
+    tjhandle get() const { return handle; }
+    tjhandle operator->() const { return handle; }
+    explicit operator bool() const { return handle != nullptr; }
+};
+
+struct TJBuffer {
+	unsigned char* data = nullptr;
+	~TJBuffer() { if (data) tjFree(data); }
+};
+
+// Standard JPEG Luminance Quantization Table (Quality 50) in ZigZag order
+static constexpr auto STD_LUMA_QTABLE = std::to_array<Byte>({
+	16, 11, 12, 14, 12, 10, 16, 14, 13, 14, 18, 17, 16, 19, 24, 40, 
+    26, 24, 22, 22, 24, 49, 35, 37, 29, 40, 58, 51, 61, 60, 57, 51, 
+    56, 55, 64, 72, 92, 78, 64, 68, 87, 69, 55, 56, 80, 109, 81, 87, 
+    95, 98, 103, 104, 103, 62, 77, 113, 121, 112, 100, 120, 92, 101, 103, 99
+});
+
+static int estimateImageQuality(const vBytes& jpg) {
+	constexpr auto DQT_SIG = std::to_array<Byte>({0xFF, 0xDB});
+    
+    constexpr size_t DQT_SEARCH_LIMIT = 32768ULL;
+
+    auto dqt_pos_opt = searchSig(jpg, std::span<const Byte>(DQT_SIG), DQT_SEARCH_LIMIT);
+    if (!dqt_pos_opt) return 80; 
+
+    std::size_t pos = *dqt_pos_opt;
+
+    if (pos + 4 > jpg.size()) return 80;
+
+    std::size_t 
+		length = (static_cast<std::size_t>(jpg[pos + 2]) << 8) | jpg[pos + 3],
+    	end    = pos + 2 + length;
+    
+    if (end > jpg.size()) return 80;
+
+    pos += 4; 
+
+    while (pos < end) {
+    	if (pos + 65 > end) break; 
+        Byte 
+			header 	  = jpg[pos++],
+        	precision = (header >> 4) & 0x0F,
+        	table_id  = header & 0x0F;
+		
+        if (precision == 0 && table_id == 0) {
+            double total_scale = 0.0;
+            
+            for (size_t i = 0; i < 64; ++i) {
+				double 
+					val = static_cast<double>(jpg[pos + i]),
+                	std = static_cast<double>(STD_LUMA_QTABLE[i]);
+				
+                total_scale += (val * 100.0) / std;
+            }
+        
+            total_scale /= 64.0;
+
+            if (total_scale <= 0.0) return 100;
+            
+            if (total_scale <= 100.0) {
+            	return static_cast<int>(200.0 - total_scale) / 2;
+            } else {
+            	return static_cast<int>(5000.0 / total_scale);
+            }
+        }   
+        pos += 64; 
     }
-    px.swap(out);
-    w = nw; h = nh;
+    return 80; 
 }
 
-// If exif_orientation found an Orientation tag, use normalize_orientation 
-// and its above helpers to normalize the pixels (bbp = 3 or 4), so that we can later safely remove
-// the EXIF segment from the cover image and have correct orientation with viewers.
-// Minimal mapper: handle 3,6,8 (most common). Add flips (2,4,5,7)...
-static void normalize_orientation(std::vector<uint8_t>& px, int& w, int& h, int ori, int bpp) {
-    switch (ori) {
-        case 3: rotate_px_180(px, w, h, bpp);   break; // 180°
-        case 6: rotate_px_90cw(px,  w, h, bpp); break; // 90° CW
-        case 8: rotate_px_270cw(px, w, h, bpp); break; // 270° CW
-        default: break; // 1 or unsupported: no-op
+static void optimizeImage(vBytes& jpg_vec) {
+	if (jpg_vec.empty()) {
+        throw std::runtime_error("JPG image is empty!");
     }
+
+    TJHandle transformer;
+    transformer.handle = tjInitTransform();
+    if (!transformer.handle) {
+        throw std::runtime_error("tjInitTransform() failed");
+    }
+  
+    int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
+    if (tjDecompressHeader3(transformer.get(), jpg_vec.data(), static_cast<unsigned long>(jpg_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
+        throw std::runtime_error(std::string("Image Error: ") + tjGetErrorStr2(transformer.get()));
+    }
+
+	if (width < 300 && height < 300) {
+        throw std::runtime_error("Image Error: Dimensions are too small.\nFor platform compatibility, cover image must be at least 300px for both width and height.");
+    }
+
+    int estimated_quality = estimateImageQuality(jpg_vec);
+    if (estimated_quality > 97) {
+    	throw std::runtime_error("Image Error: Quality too high. For platform compatibility, cover image quality must be 97 or lower.");
+    }
+	
+    auto ori_opt = exifOrientation(jpg_vec);
+    int xop = TJXOP_NONE;
+    
+    if (ori_opt) {
+    	xop = getTransformOp(*ori_opt);
+    }
+
+    tjtransform xform;
+    std::memset(&xform, 0, sizeof(tjtransform));
+    xform.op = xop;
+   
+    xform.options = TJXOPT_COPYNONE | TJXOPT_TRIM | TJXOPT_PROGRESSIVE;
+	
+    TJBuffer dstBuffer; 
+    unsigned long dstSize = 0;
+
+    if (tjTransform(transformer.get(), jpg_vec.data(), static_cast<unsigned long>(jpg_vec.size()), 1, &dstBuffer.data, &dstSize, &xform, 0) != 0) {
+    	throw std::runtime_error(std::string("tjTransform: ") + tjGetErrorStr2(transformer.get()));
+    }
+
+    if (xop == TJXOP_ROT90 || xop == TJXOP_ROT270 || xop == TJXOP_TRANSPOSE || xop == TJXOP_TRANSVERSE) {
+        std::swap(width, height);
+    }
+    jpg_vec.assign(dstBuffer.data, dstBuffer.data + dstSize);
 }
 
-// Use Turbojpeg to re-encode JPG image and (if shouldDecreaseVals = true) use library stb_image_resize2, to resize image. 
-// Continue to resize and reduce image quality until comment-block close sequence characters removed from image, or max 300 repeats results in failure.
-static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, int decrease_dims_val, bool shouldDecreaseVals) {
-	tjhandle decompressor = tjInitDecompress();
+static void resizeImage(std::vector<uint8_t>& image_file_vec, int quality_val, int decrease_dims_val) {
+    TJHandle decompressor;
+    decompressor.handle = tjInitDecompress();
     if (!decompressor) {
-    	throw std::runtime_error("tjInitDecompress() failed.");
-    }	
+        throw std::runtime_error("tjInitDecompress() failed.");
+    }
 
     int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
-
     const unsigned char* JPG_IN = reinterpret_cast<const unsigned char*>(image_file_vec.data());
 
-    if (tjDecompressHeader3(decompressor, JPG_IN, static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
-    	std::string err = tjGetErrorStr2(decompressor);
-    	tjDestroy(decompressor);
-    	throw std::runtime_error(std::string("tjDecompressHeader3: ") + err);
+    if (tjDecompressHeader3(decompressor.get(), JPG_IN, static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
+        throw std::runtime_error(std::string("tjDecompressHeader3: ") + tjGetErrorStr2(decompressor.get()));
     }
 
     if (width < decrease_dims_val || height < decrease_dims_val) {
-    	tjDestroy(decompressor);
         throw std::runtime_error("Image is too small to decrease by 1 pixel.");
     }
-    
+
     const int 
-    	PIXEL_FORMAT = TJPF_XBGR,
-		BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];	
+        PIXEL_FORMAT 	= TJPF_XBGR,
+        BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];
 
     std::vector<uint8_t> decoded_image_vec(static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(BYTES_PER_PIXEL));
 
-    if (tjDecompress2(decompressor, JPG_IN, static_cast<unsigned long>(image_file_vec.size()), reinterpret_cast<unsigned char*>(decoded_image_vec.data()), width, 0, height, PIXEL_FORMAT, 0) != 0) {
-    	std::string err = tjGetErrorStr2(decompressor);
-    	tjDestroy(decompressor);
-    	throw std::runtime_error(std::string("tjDecompress2: ") + err);
+    if (tjDecompress2(decompressor.get(), JPG_IN, static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, PIXEL_FORMAT, 0) != 0) {
+        throw std::runtime_error(std::string("tjDecompress2: ") + tjGetErrorStr2(decompressor.get()));
     }
-	
-    // Correct image orientation if required (exif).
-    if (!shouldDecreaseVals) {
-    	auto ori = exif_orientation(image_file_vec);
-   		if (ori && *ori != 1) {
-   			normalize_orientation(decoded_image_vec, width, height, *ori, BYTES_PER_PIXEL);
-		}
-   	}
 
-	tjDestroy(decompressor);
-	
-    int newWidth = 0, newHeight = 0;
-    std::vector<uint8_t> resized_image_vec;
-    
-    if (shouldDecreaseVals) {
-    	newWidth  = width  - decrease_dims_val;
-        newHeight = height - decrease_dims_val;
-        
-        std::cout << "\r" << std::string(44, ' ') << "\r"; 
-    	std::cout << "Quality: " << (int)quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush; 
-    	
-    	resized_image_vec.resize(static_cast<size_t>(newWidth) * static_cast<size_t>(newHeight) * static_cast<size_t>(BYTES_PER_PIXEL));
+    decompressor.reset(); // Done with decompressor
 
-   		if (!stbir_resize_uint8_srgb(reinterpret_cast<unsigned char*>(decoded_image_vec.data()), width, height, 0, 
-    		reinterpret_cast<unsigned char*>(resized_image_vec.data()), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
-    		throw std::runtime_error("stbir_resize_uint8_srgb failed.");
-    	}	
-    } else {
-    	newWidth  = width;
-        newHeight = height;
-    }
-   
-    tjhandle compressor = tjInitCompress(); 
-    if (!compressor) throw std::runtime_error("tjInitCompress() failed.");
-
-    unsigned char* jpegBuf  = nullptr;
-    unsigned long  jpegSize = 0;
-    
     int 
-    	subsamp = TJSAMP_420,
-    	flags = TJFLAG_PROGRESSIVE | TJFLAG_ACCURATEDCT;
-    	
-    unsigned char* vec = reinterpret_cast<unsigned char*>((shouldDecreaseVals ? resized_image_vec.data() : decoded_image_vec.data()));
-    
-    if (tjCompress2(compressor, vec, newWidth, 0, newHeight, PIXEL_FORMAT, &jpegBuf, &jpegSize, subsamp, quality_val, flags) != 0) {
-    	if (jpegBuf) { tjFree(jpegBuf); jpegBuf = nullptr; }
-    	std::string err = tjGetErrorStr2(compressor);
-    	tjDestroy(compressor);
-    	throw std::runtime_error(std::string("tjCompress2: ") + err);
+		newWidth  = width  - decrease_dims_val,
+    	newHeight = height - decrease_dims_val;
+
+    std::cout << "\r" << std::string(44, ' ') << "\r"; 
+    std::cout << "Quality: " << quality_val << "% | Width: " << newWidth << " | Height: " << newHeight << std::flush;
+
+    std::vector<uint8_t> resized_image_vec(static_cast<size_t>(newWidth) * static_cast<size_t>(newHeight) * static_cast<size_t>(BYTES_PER_PIXEL));
+
+    if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, 
+    	resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
+        throw std::runtime_error("stbir_resize_uint8_srgb failed.");
     }
-   
-    std::vector<uint8_t> output_image_vec(jpegBuf, jpegBuf + jpegSize);
-	
-    tjFree(jpegBuf);
-    tjDestroy(compressor);
-    
-    image_file_vec.swap(output_image_vec);
+
+    TJHandle compressor;
+    compressor.handle = tjInitCompress();
+    if (!compressor) {
+        throw std::runtime_error("tjInitCompress() failed.");
+    }
+
+    TJBuffer jpegBuf;
+    unsigned long jpegSize = 0;
+
+    int 
+		subsamp = TJSAMP_440,
+    	flags 	= TJFLAG_PROGRESSIVE | TJFLAG_ACCURATEDCT;
+
+    if (tjCompress2(compressor.get(), resized_image_vec.data(), newWidth, 0, newHeight, PIXEL_FORMAT, &jpegBuf.data, &jpegSize, subsamp, quality_val, flags) != 0) {
+        throw std::runtime_error(std::string("tjCompress2: ") + tjGetErrorStr2(compressor.get()));
+    }
+    image_file_vec.assign(jpegBuf.data, jpegBuf.data + jpegSize);
 }
 
 int main(int argc, char** argv) {
@@ -460,7 +548,7 @@ int main(int argc, char** argv) {
 			std::cout << "\nChecking cover image for comment-block close sequences \"#>\" (0x23, 0x3E).\n\n"
 			  		<< "Image quality & dimensions will be reduced in an attempt to remove them.\n\n";
 
-			resizeImage(image_file_vec, quality_val, decrease_dims_val, shouldDecreaseVals);
+			optimizeImage(image_file_vec);
 			
 			constexpr size_t DQT_SEARCH_LIMIT = 100ULL;   
           
@@ -510,7 +598,7 @@ int main(int argc, char** argv) {
 				++decrease_dims_val;
 				quality_val -= (decrease_attempts % 15 == 0) ? 2 : 0;
 				
-				resizeImage(image_file_vec, quality_val, decrease_dims_val, shouldDecreaseVals);
+				resizeImage(image_file_vec, quality_val, decrease_dims_val);
 
 				index_opt = searchSig(image_file_vec, COMMENT_BLOCK_SIG);
 				
@@ -641,7 +729,7 @@ int main(int argc, char** argv) {
 
 		std::random_device rd;
     	std::mt19937 gen(rd());
-    	std::uniform_int_distribution<> dist(10000, 99999);  // Five-digit random number
+    	std::uniform_int_distribution<> dist(10000, 99999);  
 
 		const std::string OUTPUT_FILENAME = "jpws_" + std::to_string(dist(gen)) + ".jpg";
 
