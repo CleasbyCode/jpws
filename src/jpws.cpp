@@ -484,7 +484,7 @@ int main(int argc, char** argv) {
 
 			optimizeImage(image_file_vec);
 			
-			constexpr size_t DQT_SEARCH_LIMIT = 100;   
+			constexpr std::size_t DQT_SEARCH_LIMIT = 100;   
           
     		constexpr auto COMMENT_BLOCK_SIG = std::to_array<Byte>({ 0x23, 0x3E });
     			 
