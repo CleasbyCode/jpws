@@ -633,7 +633,7 @@ int main(int argc, char** argv) {
 			segment_size_field_index = 0x16,
 			profile_size_field_index = 0x26;		
 		
-		const size_t 
+		const std::size_t 
 			SEGMENT_SIZE = (profile_vec.size() + JIFF_SIG_LENGTH) - segment_size_field_index,
 			PROFILE_SIZE = SEGMENT_SIZE - bits;
 	
@@ -694,3 +694,4 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
