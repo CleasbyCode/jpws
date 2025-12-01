@@ -174,7 +174,7 @@ static std::optional<std::size_t> searchSig(const vBytes& v, std::span<const Byt
 }
 
 [[nodiscard]] static std::optional<uint16_t> exifOrientation(const vBytes& jpg) {
-	constexpr size_t EXIF_SEARCH_LIMIT = 4096ULL;
+	constexpr size_t EXIF_SEARCH_LIMIT = 4096;
 	constexpr auto APP1_SIG = std::to_array<Byte>({0xFF, 0xE1});
 
 	auto app1_pos_opt = searchSig(jpg, std::span<const Byte>(APP1_SIG), EXIF_SEARCH_LIMIT);
@@ -191,7 +191,7 @@ static std::optional<std::size_t> searchSig(const vBytes& v, std::span<const Byt
 
     std::span<const Byte> payload(jpg.data() + pos + 4, segment_length - 2);
 
-    constexpr std::size_t EXIF_HEADER_SIZE = 6ULL;
+    constexpr std::size_t EXIF_HEADER_SIZE = 6;
     constexpr auto EXIF_SIG = std::to_array<Byte>({'E', 'x', 'i', 'f', '\0', '\0'});
 
     if (payload.size() < EXIF_HEADER_SIZE || 
@@ -237,10 +237,10 @@ static std::optional<std::size_t> searchSig(const vBytes& v, std::span<const Byt
     if (ifd_offset < 8 || ifd_offset >= tiff_data.size()) return std::nullopt;
     
     uint16_t entry_count = read16(ifd_offset);
-    std::size_t current_entry = ifd_offset + 2ULL; 
+    std::size_t current_entry = ifd_offset + 2; 
 
     constexpr uint16_t TAG_ORIENTATION = 0x0112;
-    constexpr std::size_t ENTRY_SIZE = 12ULL;
+    constexpr std::size_t ENTRY_SIZE = 12;
 
     for (uint16_t i = 0; i < entry_count; ++i) {
     	if (current_entry + ENTRY_SIZE > tiff_data.size()) return std::nullopt;
@@ -449,8 +449,8 @@ int main(int argc, char** argv) {
 		std::size_t image_file_size = fs::file_size(args.image_file_path);
 
     	constexpr std::size_t 
-    		MIN_IMAGE_SIZE = 134ULL,
-    		MAX_IMAGE_SIZE = 4ULL * 1024 * 1024;
+    		MIN_IMAGE_SIZE = 134,
+    		MAX_IMAGE_SIZE = 4 * 1024 * 1024;
 
     	if (MIN_IMAGE_SIZE > image_file_size) {
         	throw std::runtime_error("Image File Error: Invalid file size.");
@@ -467,7 +467,7 @@ int main(int argc, char** argv) {
 
 		constexpr uint8_t COMPATIBLE_IMAGE_VAL = 0x19;
 		
-		constexpr std::size_t JIFF_SIG_LENGTH = 20ULL;
+		constexpr std::size_t JIFF_SIG_LENGTH = 20;
 
 		bool 
 			shouldDecreaseVals = false,
@@ -484,7 +484,7 @@ int main(int argc, char** argv) {
 
 			optimizeImage(image_file_vec);
 			
-			constexpr size_t DQT_SEARCH_LIMIT = 100ULL;   
+			constexpr size_t DQT_SEARCH_LIMIT = 100;   
           
     		constexpr auto COMMENT_BLOCK_SIG = std::to_array<Byte>({ 0x23, 0x3E });
     			 
@@ -557,7 +557,7 @@ int main(int argc, char** argv) {
 			std::copy(DEFAULT_BYTES.rbegin(), DEFAULT_BYTES.rend(), image_file_vec.rbegin() + 2);
 		}
 	
-		constexpr std::size_t PWSH_INSERT_INDEX = 6ULL;
+		constexpr std::size_t PWSH_INSERT_INDEX = 6;
 			
 		if (!fs::exists(args.pwsh_file_path)) {
         	throw std::runtime_error("Script File Error: PowerShell script file not found.");
@@ -580,8 +580,8 @@ int main(int argc, char** argv) {
 		uintmax_t pwsh_file_size = fs::file_size(args.pwsh_file_path);
 		
 		constexpr std::size_t 
-			MAX_PWSH_SIZE = 10ULL * 1024,
-			MIN_PWSH_SIZE = 10ULL;
+			MAX_PWSH_SIZE = 10 * 1024,
+			MIN_PWSH_SIZE = 10;
 	
 		if (MIN_PWSH_SIZE > pwsh_file_size) {
         	throw std::runtime_error("PowerShell File Error: Invalid file size.");
@@ -637,7 +637,7 @@ int main(int argc, char** argv) {
 			SEGMENT_SIZE = (profile_vec.size() + JIFF_SIG_LENGTH) - segment_size_field_index,
 			PROFILE_SIZE = SEGMENT_SIZE - bits;
 	
-		constexpr std::size_t MAX_POWERSHELL_FILE_SIZE = 10ULL * 1024; 
+		constexpr std::size_t MAX_POWERSHELL_FILE_SIZE = 10 * 1024; 
 
 		if (SEGMENT_SIZE > MAX_POWERSHELL_FILE_SIZE) {
 			throw std::runtime_error("Segment Size Error: The profile segment (FFE2) exceeds the maximum size limit of 10KB.");
@@ -694,4 +694,3 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
-
