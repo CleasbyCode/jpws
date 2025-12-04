@@ -2,7 +2,7 @@
 
 Embed a ***PowerShell*** script within a ***JPG*** image to create a tweetable ***JPG-PowerShell*** polyglot file.  
 
-![Demo Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/jpws_50696.jpg)  
+![Demo Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/jpws_85348.jpg)  
 ***Credits:  
 {Image "Rainbow Dragon" [Duncan Crombie / @theartofweb](https://x.com/theartofweb)  
 PowerShell "text-sine.ps1" [Darren Shaw / @gierrofo](https://x.com/gierrofo)}***  
