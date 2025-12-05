@@ -8,7 +8,7 @@
 
 // $ chmod +x compile_jpws.sh
 // $ ./compile_jpws.sh
-	
+
 // $ Compilation successful. Executable 'jpws' created.
 
 // $ sudo cp jpws /usr/bin
@@ -59,39 +59,39 @@ using Byte   = std::uint8_t;
 using vBytes = std::vector<Byte>;
 
 enum class FileTypeCheck : Byte {
-	cover_image = 1, // Conceal mode...
-    script_file = 2  // Conceal mode...
+	cover_image = 1, 
+    script_file = 2  
 };
 
 static void displayInfo() {
 	std::print(R"(
 
 JPG-PowerShell Polyglot for X-Twitter (jpws v1.8)
-Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024 
+Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024
 
-CLI tool for embedding a PowerShell script within a JPG image, 
+CLI tool for embedding a PowerShell script within a JPG image,
 creating a tweetable JPG-PowerShell polyglot file.
 
 ──────────────────────────
 Compile & run (Linux)
 ──────────────────────────
-		
+
 $ sudo apt install libturbojpeg0-dev
 
 $ chmod +x compile_jpws.sh
 $ ./compile_jpws.sh
-	
+
 Compilation successful. Executable 'jpws' created.
 
 $ sudo cp jpws /usr/bin
 $ jpws
-		
+
 Usage:  jpws [-alt] <cover_image> <powershell_script>
         jpws --info
-		
+
 Share your "PowerShell-embedded" JPG image on X-Twitter.
 
-Max script size is ~10KB. 
+Max script size is ~10KB.
 Max image size is 4MB.
 
 https://github.com/CleasbyCode/jpws
@@ -136,15 +136,16 @@ std::optional<ProgramArgs> ProgramArgs::parse(int argc, char** argv) {
 
     if (opt == "-alt") {
         if (argc != 4) die();
+        if (arg(2).empty() || arg(3).empty()) die();
         out.image_file_path = fs::path(arg(2));
         out.pwsh_file_path  = fs::path(arg(3));
         out.option = Option::Alt;
     } else {
         if (argc != 3) die();
+        if (arg(1).empty() || arg(2).empty()) die();
         out.image_file_path = fs::path(arg(1));
         out.pwsh_file_path  = fs::path(arg(2));
     }
-
     return out;
 }
 
@@ -214,8 +215,7 @@ static std::optional<std::size_t> searchSig(std::span<const Byte> v, std::span<c
     constexpr std::size_t EXIF_HEADER_SIZE = 6;
     constexpr auto EXIF_SIG = std::to_array<Byte>({'E', 'x', 'i', 'f', '\0', '\0'});
 
-    if (payload.size() < EXIF_HEADER_SIZE ||
-        !std::ranges::equal(payload.first(EXIF_HEADER_SIZE), EXIF_SIG)) {
+    if (payload.size() < EXIF_HEADER_SIZE || !std::ranges::equal(payload.first(EXIF_HEADER_SIZE), EXIF_SIG)) {
         return std::nullopt;
     }
 
@@ -320,8 +320,15 @@ struct TJHandle {
 };
 
 struct TJBuffer {
-	unsigned char* data = nullptr;
-	~TJBuffer() { if (data) tjFree(data); }
+    unsigned char* data = nullptr;
+
+    TJBuffer() = default;
+    ~TJBuffer() { if (data) tjFree(data); }
+
+    TJBuffer(const TJBuffer&) = delete;
+    TJBuffer& operator=(const TJBuffer&) = delete;
+    TJBuffer(TJBuffer&&) = delete;
+    TJBuffer& operator=(TJBuffer&&) = delete;
 };
 
 static void optimizeImage(vBytes& jpg_vec) {
@@ -340,7 +347,7 @@ static void optimizeImage(vBytes& jpg_vec) {
         throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
     }
 
-	if (width < 300 && height < 300) {
+	if (width < 300 || height < 300) {
         throw std::runtime_error("Image Error: Dimensions are too small.\nFor platform compatibility, cover image must be at least 300px for both width and height.");
     }
 
@@ -364,9 +371,6 @@ static void optimizeImage(vBytes& jpg_vec) {
     	throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
     }
 
-    if (xop == TJXOP_ROT90 || xop == TJXOP_ROT270 || xop == TJXOP_TRANSPOSE || xop == TJXOP_TRANSVERSE) {
-        std::swap(width, height);
-    }
     jpg_vec.assign(dstBuffer.data, dstBuffer.data + dstSize);
 }
 
@@ -504,7 +508,7 @@ int main(int argc, char** argv) {
 
 		vBytes image_file_vec = readFile(args.image_file_path, FileTypeCheck::cover_image);
 
-        constexpr Byte COMPATIBLE_IMAGE_VAL = 0x19;
+        constexpr Byte COMPATIBLE_IMAGE_VAL = 0x19;  // Compatible image value marker.
 
         constexpr std::size_t JFIF_SIG_LENGTH = 20;
 
@@ -514,7 +518,8 @@ int main(int argc, char** argv) {
 
         vBytes image_file_vec_copy;
 
-        if (image_file_vec[0x0D] != COMPATIBLE_IMAGE_VAL) {
+        constexpr std::size_t MARKER_INDEX = 0x0D;
+        if (image_file_vec[MARKER_INDEX] != COMPATIBLE_IMAGE_VAL) {
 
             int quality_val = 97, decrease_attempts = 300, decrease_dims_val = 0;
 
@@ -622,16 +627,18 @@ int main(int argc, char** argv) {
 
 		vBytes().swap(pwsh_file_vec);
 
-        Byte bits = 16;
+        constexpr std::size_t
+            JFIF_COMMENT_BLOCK_INDEX = 0x0C,
+            SEGMENT_SIZE_FIELD_INDEX = 0x16,
+            PROFILE_SIZE_FIELD_INDEX = 0x26;
 
         std::size_t
-            jfif_comment_block_index = 0x0C,
-            segment_size_field_index = 0x16,
-            profile_size_field_index = 0x26;
+            segment_index = SEGMENT_SIZE_FIELD_INDEX,
+            profile_index = PROFILE_SIZE_FIELD_INDEX;
 
         const std::size_t
-            SEGMENT_SIZE = (profile_vec.size() + JFIF_SIG_LENGTH) - segment_size_field_index,
-            PROFILE_SIZE = SEGMENT_SIZE - bits;
+            SEGMENT_SIZE = (profile_vec.size() + JFIF_SIG_LENGTH) - segment_index,
+            PROFILE_SIZE = SEGMENT_SIZE - 16;
 
         constexpr std::size_t MAX_POWERSHELL_FILE_SIZE = 10 * 1024;
 
@@ -643,23 +650,22 @@ int main(int argc, char** argv) {
 
 		vBytes().swap(profile_vec);
 
-        while (bits) {
-        	image_file_vec[segment_size_field_index++] = (SEGMENT_SIZE >> (bits -= 8)) & 0xFF;
-        }
+        auto writeBigEndian = [](vBytes& vec, std::size_t index, std::size_t value, int bytes) {
+            for (int i = bytes - 1; i >= 0; --i) {
+                vec[index++] = (value >> (i * 8)) & 0xFF;
+            }
+        };
 
-        bits = 32;
-
-        while (bits) {
-            image_file_vec[profile_size_field_index++] = (PROFILE_SIZE >> (bits -= 8)) & 0xFF;
-        }
+        writeBigEndian(image_file_vec, segment_index, SEGMENT_SIZE, 2);
+        writeBigEndian(image_file_vec, profile_index, PROFILE_SIZE, 4);
 
         constexpr auto JFIF_COMMENT_BLOCK = std::to_array<Byte>({ 0x58, 0x54, 0x57, 0x0A, 0x3C, 0x23 });
 
-        std::ranges::copy(JFIF_COMMENT_BLOCK, image_file_vec.begin() + jfif_comment_block_index);
+        std::ranges::copy(JFIF_COMMENT_BLOCK, image_file_vec.begin() + JFIF_COMMENT_BLOCK_INDEX);
 
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dist(10000, 99999);
+        std::uniform_int_distribution<int> dist(10000, 99999);
 
         const std::string OUTPUT_FILENAME = std::format("jpws_{}.jpg", dist(gen));
 
