@@ -1,4 +1,4 @@
-// JPG-PowerShell Polyglot for X-Twitter (jpws v1.8) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
+// JPG-PowerShell Polyglot for X-Twitter (jpws v1.9) Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024.
 
 // CLI source code (Linux / Windows).
 
@@ -55,18 +55,19 @@
 
 namespace fs = std::filesystem;
 
-using Byte   = std::uint8_t;
-using vBytes = std::vector<Byte>;
+namespace {
+    using Byte   = std::uint8_t;
+    using vBytes = std::vector<Byte>;
 
-enum class FileTypeCheck : Byte {
-	cover_image = 1, 
-    script_file = 2  
-};
+    enum class FileTypeCheck : Byte {
+        cover_image = 1, // Conceal mode...
+        script_file = 2  // Conceal mode...
+    };
 
-static void displayInfo() {
-	std::print(R"(
+    void displayInfo() {
+        std::print(R"(
 
-JPG-PowerShell Polyglot for X-Twitter (jpws v1.8)
+JPG-PowerShell Polyglot for X-Twitter (jpws v1.9)
 Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024
 
 CLI tool for embedding a PowerShell script within a JPG image,
@@ -96,407 +97,408 @@ Max image size is 4MB.
 
 https://github.com/CleasbyCode/jpws
 
-)");
-}
-
-enum class Option : unsigned char { None, Alt };
-
-struct ProgramArgs {
-    Option option{Option::None};
-    fs::path image_file_path;
-    fs::path pwsh_file_path;
-
-    static std::optional<ProgramArgs> parse(int argc, char** argv);
-};
-
-std::optional<ProgramArgs> ProgramArgs::parse(int argc, char** argv) {
-    auto arg = [&](int i) -> std::string_view {
-        return (i >= 0 && i < argc) ? std::string_view(argv[i]) : std::string_view{};
-    };
-
-    const std::string prog  = fs::path(argv[0]).filename().string();
-    const std::string USAGE = std::format(
-        "Usage:  {} [-alt] <cover_image> <powershell_script>\n\t{} --info",
-        prog, prog
-    );
-
-    auto die = [&]() -> std::optional<ProgramArgs> {
-        throw std::runtime_error(USAGE);
-    };
-
-    if (argc < 2) die();
-
-    if (argc == 2 && arg(1) == "--info") {
-        displayInfo();
-        return std::nullopt;
+    )");
     }
 
-    ProgramArgs out{};
-    const std::string_view opt = arg(1);
+    enum class Option : unsigned char { None, Alt };
 
-    if (opt == "-alt") {
-        if (argc != 4) die();
-        if (arg(2).empty() || arg(3).empty()) die();
-        out.image_file_path = fs::path(arg(2));
-        out.pwsh_file_path  = fs::path(arg(3));
-        out.option = Option::Alt;
-    } else {
-        if (argc != 3) die();
-        if (arg(1).empty() || arg(2).empty()) die();
-        out.image_file_path = fs::path(arg(1));
-        out.pwsh_file_path  = fs::path(arg(2));
-    }
-    return out;
-}
+    struct ProgramArgs {
+        Option option{Option::None};
+        fs::path image_file_path;
+        fs::path pwsh_file_path;
 
-static bool hasValidFilename(const fs::path& p) {
-    if (p.empty()) {
-        return false;
-    }
-
-    std::string filename = p.filename().string();
-    if (filename.empty()) {
-        return false;
-    }
-
-    auto validChar = [](unsigned char c) {
-        return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '@' || c == '%';
+        static std::optional<ProgramArgs> parse(int argc, char** argv);
     };
 
-    return std::ranges::all_of(filename, validChar);
-}
+    std::optional<ProgramArgs> ProgramArgs::parse(int argc, char** argv) {
+        auto arg = [&](int i) -> std::string_view {
+            return (i >= 0 && i < argc) ? std::string_view(argv[i]) : std::string_view{};
+        };
 
-static bool hasFileExtension(const fs::path& p, std::initializer_list<std::string_view> exts) {
-    auto e = p.extension().string();
-    std::ranges::transform(e, e.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
+        constexpr std::string_view PREFIX = "Usage: ";
+        const std::string
+            PROG = fs::path(argv[0]).filename().string(),
+            INDENT(PREFIX.size(), ' '),
+            USAGE = std::format("{}{} <cover_image> <pwsh_script>\n""{}{} --info", PREFIX, PROG, INDENT, PROG, INDENT);
 
-    return std::ranges::any_of(exts, [&e](std::string_view ext) {
-        std::string c{ext};
-        std::ranges::transform(c, c.begin(), [](unsigned char x) {
-            return static_cast<char>(std::tolower(x));
-        });
-        return e == c;
-    });
-}
+        auto die = [&]() -> std::optional<ProgramArgs> {
+            throw std::runtime_error(USAGE);
+        };
 
-// Default limit of 0 means "Search Whole File".
-// Any other value means "Search ONLY up to this limit".
-static std::optional<std::size_t> searchSig(std::span<const Byte> v, std::span<const Byte> sig, std::size_t limit = 0) {
-    auto search_span = (limit == 0 || limit > v.size())
-        ? v
-        : v.first(limit);
+        if (argc < 2) die();
 
-    auto it = std::ranges::search(search_span, sig);
-
-    if (it.empty()) return std::nullopt;
-    return static_cast<std::size_t>(it.begin() - v.begin());
-}
-
-[[nodiscard]] static std::optional<uint16_t> exifOrientation(std::span<const Byte> jpg) {
-    constexpr std::size_t EXIF_SEARCH_LIMIT = 4096;
-    constexpr auto APP1_SIG = std::to_array<Byte>({0xFF, 0xE1});
-
-    auto app1_pos_opt = searchSig(jpg, APP1_SIG, EXIF_SEARCH_LIMIT);
-
-    if (!app1_pos_opt) return std::nullopt;
-    std::size_t pos = *app1_pos_opt;
-
-    if (pos + 4 > jpg.size()) return std::nullopt;
-
-    uint16_t segment_length = (static_cast<uint16_t>(jpg[pos + 2]) << 8) | jpg[pos + 3];
-    std::size_t exif_end = pos + 2 + segment_length;
-
-    if (exif_end > jpg.size()) return std::nullopt;
-
-    std::span<const Byte> payload(jpg.data() + pos + 4, segment_length - 2);
-
-    constexpr std::size_t EXIF_HEADER_SIZE = 6;
-    constexpr auto EXIF_SIG = std::to_array<Byte>({'E', 'x', 'i', 'f', '\0', '\0'});
-
-    if (payload.size() < EXIF_HEADER_SIZE || !std::ranges::equal(payload.first(EXIF_HEADER_SIZE), EXIF_SIG)) {
-        return std::nullopt;
-    }
-
-    std::span<const Byte> tiff_data = payload.subspan(EXIF_HEADER_SIZE);
-
-    if (tiff_data.size() < 8) return std::nullopt;
-
-    bool is_le = false;
-    if (tiff_data[0] == 'I' && tiff_data[1] == 'I') is_le = true;
-    else if (tiff_data[0] == 'M' && tiff_data[1] == 'M') is_le = false;
-    else return std::nullopt;
-
-    auto read16 = [&](std::size_t offset) -> uint16_t {
-        if (offset + 2 > tiff_data.size()) return 0;
-        uint16_t value;
-        std::memcpy(&value, tiff_data.data() + offset, 2);
-        return is_le ? value : std::byteswap(value);
-    };
-
-    auto read32 = [&](std::size_t offset) -> uint32_t {
-        if (offset + 4 > tiff_data.size()) return 0;
-        uint32_t value;
-        std::memcpy(&value, tiff_data.data() + offset, 4);
-        return is_le ? value : std::byteswap(value);
-    };
-
-    if (read16(2) != 0x002A) return std::nullopt;
-
-    uint32_t ifd_offset = read32(4);
-
-    if (ifd_offset < 8 || ifd_offset >= tiff_data.size()) return std::nullopt;
-
-    uint16_t entry_count = read16(ifd_offset);
-    std::size_t current_entry = ifd_offset + 2;
-
-    constexpr uint16_t TAG_ORIENTATION = 0x0112;
-    constexpr std::size_t ENTRY_SIZE = 12;
-
-    for (uint16_t i = 0; i < entry_count; ++i) {
-    	if (current_entry + ENTRY_SIZE > tiff_data.size()) return std::nullopt;
-
-        uint16_t tag_id = read16(current_entry);
-
-        if (tag_id == TAG_ORIENTATION) {
-            return read16(current_entry + 8);
+        if (argc == 2 && arg(1) == "--info") {
+            displayInfo();
+            return std::nullopt;
         }
-        current_entry += ENTRY_SIZE;
-    }
-    return std::nullopt;
-}
 
-// Helper: Map EXIF orientation (1-8) to TurboJPEG Transform Operations
-static int getTransformOp(uint16_t orientation) {
-    switch (orientation) {
-        case 2: return TJXOP_HFLIP;
-        case 3: return TJXOP_ROT180;
-        case 4: return TJXOP_VFLIP;
-        case 5: return TJXOP_TRANSPOSE;
-        case 6: return TJXOP_ROT90;
-        case 7: return TJXOP_TRANSVERSE;
-        case 8: return TJXOP_ROT270;
-        default: return TJXOP_NONE;
-    }
-}
+        ProgramArgs out{};
+        const std::string_view opt = arg(1);
 
-// TurboJPEG. RAII wrapper for tjhandle (decompressor or compressor)
-struct TJHandle {
-	tjhandle handle = nullptr;
-
-    TJHandle() = default;
-
-    TJHandle(const TJHandle&) = delete;
-   	TJHandle& operator=(const TJHandle&) = delete;
-
-    TJHandle(TJHandle&& other) noexcept : handle(other.handle) {
-        other.handle = nullptr;
+        if (opt == "-alt") {
+            if (argc != 4) die();
+            if (arg(2).empty() || arg(3).empty()) die();
+            out.image_file_path = fs::path(arg(2));
+            out.pwsh_file_path  = fs::path(arg(3));
+            out.option = Option::Alt;
+        } else {
+            if (argc != 3) die();
+            if (arg(1).empty() || arg(2).empty()) die();
+            out.image_file_path = fs::path(arg(1));
+            out.pwsh_file_path  = fs::path(arg(2));
+        }
+        return out;
     }
 
-    TJHandle& operator=(TJHandle&& other) noexcept {
-    	if (this != &other) {
-        	reset();
-            handle = other.handle;
+    [[nodiscard]] bool hasValidFilename(const fs::path& p) {
+        if (p.empty()) {
+            return false;
+        }
+        std::string filename = p.filename().string();
+        if (filename.empty()) {
+            return false;
+        }
+        auto validChar = [](unsigned char c) {
+            return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '@' || c == '%';
+        };
+        return std::ranges::all_of(filename, validChar);
+    }
+
+    [[nodiscard]] bool hasFileExtension(const fs::path& p, std::initializer_list<std::string_view> exts) {
+        auto e = p.extension().string();
+        std::ranges::transform(e, e.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+
+        return std::ranges::any_of(exts, [&e](std::string_view ext) {
+            std::string c{ext};
+            std::ranges::transform(c, c.begin(), [](unsigned char x) {
+                return static_cast<char>(std::tolower(x));
+            });
+            return e == c;
+        });
+    }
+
+    // Default limit of 0 means "Search Whole File".
+    // Any other value means "Search ONLY up to this limit".
+    [[nodiscard]] std::optional<std::size_t> searchSig(std::span<const Byte> v, std::span<const Byte> sig, std::size_t limit = 0) {
+        auto search_span = (limit == 0 || limit > v.size())
+            ? v
+            : v.first(limit);
+
+        auto it = std::ranges::search(search_span, sig);
+
+        if (it.empty()) return std::nullopt;
+        return static_cast<std::size_t>(it.begin() - v.begin());
+    }
+
+    [[nodiscard]] std::optional<uint16_t> exifOrientation(std::span<const Byte> jpg) {
+        constexpr std::size_t EXIF_SEARCH_LIMIT = 4096;
+        constexpr auto APP1_SIG = std::to_array<Byte>({0xFF, 0xE1});
+
+        auto app1_pos_opt = searchSig(jpg, APP1_SIG, EXIF_SEARCH_LIMIT);
+
+        if (!app1_pos_opt) return std::nullopt;
+        std::size_t pos = *app1_pos_opt;
+
+        if (pos + 4 > jpg.size()) return std::nullopt;
+
+        uint16_t segment_length = (static_cast<uint16_t>(jpg[pos + 2]) << 8) | jpg[pos + 3];
+        std::size_t exif_end = pos + 2 + segment_length;
+
+        if (exif_end > jpg.size()) return std::nullopt;
+
+        std::span<const Byte> payload(jpg.data() + pos + 4, segment_length - 2);
+
+        constexpr std::size_t EXIF_HEADER_SIZE = 6;
+        constexpr auto EXIF_SIG = std::to_array<Byte>({'E', 'x', 'i', 'f', '\0', '\0'});
+
+        if (payload.size() < EXIF_HEADER_SIZE ||
+            !std::ranges::equal(payload.first(EXIF_HEADER_SIZE), EXIF_SIG)) {
+            return std::nullopt;
+        }
+
+        std::span<const Byte> tiff_data = payload.subspan(EXIF_HEADER_SIZE);
+
+        if (tiff_data.size() < 8) return std::nullopt;
+
+        bool is_le = false;
+        if (tiff_data[0] == 'I' && tiff_data[1] == 'I') is_le = true;
+        else if (tiff_data[0] == 'M' && tiff_data[1] == 'M') is_le = false;
+        else return std::nullopt;
+
+        auto read16 = [&](std::size_t offset) -> uint16_t {
+            if (offset + 2 > tiff_data.size()) return 0;
+            uint16_t value;
+            std::memcpy(&value, tiff_data.data() + offset, 2);
+            return is_le ? value : std::byteswap(value);
+        };
+
+        auto read32 = [&](std::size_t offset) -> uint32_t {
+            if (offset + 4 > tiff_data.size()) return 0;
+            uint32_t value;
+            std::memcpy(&value, tiff_data.data() + offset, 4);
+            return is_le ? value : std::byteswap(value);
+        };
+
+        if (read16(2) != 0x002A) return std::nullopt;
+
+        uint32_t ifd_offset = read32(4);
+
+        if (ifd_offset < 8 || ifd_offset >= tiff_data.size()) return std::nullopt;
+
+        uint16_t entry_count = read16(ifd_offset);
+        std::size_t current_entry = ifd_offset + 2;
+
+        constexpr uint16_t TAG_ORIENTATION = 0x0112;
+        constexpr std::size_t ENTRY_SIZE = 12;
+
+        for (uint16_t i = 0; i < entry_count; ++i) {
+            if (current_entry + ENTRY_SIZE > tiff_data.size()) return std::nullopt;
+
+            uint16_t tag_id = read16(current_entry);
+
+            if (tag_id == TAG_ORIENTATION) {
+                return read16(current_entry + 8);
+            }
+            current_entry += ENTRY_SIZE;
+        }
+        return std::nullopt;
+    }
+
+    // Helper: Map EXIF orientation (1-8) to TurboJPEG Transform Operations
+    [[nodiscard]] int getTransformOp(uint16_t orientation) {
+        switch (orientation) {
+            case 2: return TJXOP_HFLIP;
+            case 3: return TJXOP_ROT180;
+            case 4: return TJXOP_VFLIP;
+            case 5: return TJXOP_TRANSPOSE;
+            case 6: return TJXOP_ROT90;
+            case 7: return TJXOP_TRANSVERSE;
+            case 8: return TJXOP_ROT270;
+            default: return TJXOP_NONE;
+        }
+    }
+
+    // TurboJPEG. RAII wrapper for tjhandle (decompressor or compressor)
+    struct TJHandle {
+        tjhandle handle = nullptr;
+
+        TJHandle() = default;
+
+        TJHandle(const TJHandle&) = delete;
+        TJHandle& operator=(const TJHandle&) = delete;
+
+        TJHandle(TJHandle&& other) noexcept : handle(other.handle) {
             other.handle = nullptr;
         }
-        return *this;
-    }
 
-    ~TJHandle() {
-        reset();
-    }
-
-    void reset() {
-        if (handle) {
-        	tjDestroy(handle);
-            handle = nullptr;
-        }
-    }
-
-    tjhandle get() const { return handle; }
-    tjhandle operator->() const { return handle; }
-    explicit operator bool() const { return handle != nullptr; }
-};
-
-struct TJBuffer {
-    unsigned char* data = nullptr;
-
-    TJBuffer() = default;
-    ~TJBuffer() { if (data) tjFree(data); }
-
-    TJBuffer(const TJBuffer&) = delete;
-    TJBuffer& operator=(const TJBuffer&) = delete;
-    TJBuffer(TJBuffer&&) = delete;
-    TJBuffer& operator=(TJBuffer&&) = delete;
-};
-
-static void optimizeImage(vBytes& jpg_vec) {
-    if (jpg_vec.empty()) {
-        throw std::runtime_error("JPG image is empty!");
-    }
-
-    TJHandle transformer;
-    transformer.handle = tjInitTransform();
-    if (!transformer) {
-        throw std::runtime_error("tjInitTransform() failed");
-    }
-
-    int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
-    if (tjDecompressHeader3(transformer.get(), jpg_vec.data(), static_cast<unsigned long>(jpg_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
-        throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
-    }
-
-	if (width < 300 || height < 300) {
-        throw std::runtime_error("Image Error: Dimensions are too small.\nFor platform compatibility, cover image must be at least 300px for both width and height.");
-    }
-
-    auto ori_opt = exifOrientation(jpg_vec);
-    int xop = TJXOP_NONE;
-
-    if (ori_opt) {
-    	xop = getTransformOp(*ori_opt);
-    }
-
-    tjtransform xform;
-    std::memset(&xform, 0, sizeof(tjtransform));
-    xform.op = xop;
-
-    xform.options = TJXOPT_COPYNONE | TJXOPT_TRIM | TJXOPT_PROGRESSIVE;
-
-    TJBuffer dstBuffer;
-    unsigned long dstSize = 0;
-
-    if (tjTransform(transformer.get(), jpg_vec.data(), static_cast<unsigned long>(jpg_vec.size()), 1, &dstBuffer.data, &dstSize, &xform, 0) != 0) {
-    	throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
-    }
-
-    jpg_vec.assign(dstBuffer.data, dstBuffer.data + dstSize);
-}
-
-static void resizeImage(vBytes& image_file_vec, int quality_val, int decrease_dims_val) {
-    TJHandle decompressor;
-    decompressor.handle = tjInitDecompress();
-    if (!decompressor) {
-        throw std::runtime_error("tjInitDecompress() failed.");
-    }
-
-    int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
-    const unsigned char* JPG_IN = reinterpret_cast<const unsigned char*>(image_file_vec.data());
-
-    if (tjDecompressHeader3(decompressor.get(), JPG_IN, static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
-        throw std::runtime_error(std::format("tjDecompressHeader3: {}", tjGetErrorStr2(decompressor.get())));
-    }
-
-    if (width < decrease_dims_val || height < decrease_dims_val) {
-        throw std::runtime_error("Image is too small to decrease by 1 pixel.");
-    }
-
-    const int
-        PIXEL_FORMAT    = TJPF_XBGR,
-        BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];
-
-    vBytes decoded_image_vec(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * static_cast<std::size_t>(BYTES_PER_PIXEL));
-
-    if (tjDecompress2(decompressor.get(), JPG_IN, static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, PIXEL_FORMAT, 0) != 0) {
-        throw std::runtime_error(std::format("tjDecompress2: {}", tjGetErrorStr2(decompressor.get())));
-    }
-
-    decompressor.reset();
-
-    int newWidth  = width  - decrease_dims_val;
-    int newHeight = height - decrease_dims_val;
-
-    std::print("\r{:44}\r", "");
-    std::print("Quality: {}% | Width: {} | Height: {}", quality_val, newWidth, newHeight);
-    std::fflush(stdout);
-
-    vBytes resized_image_vec(static_cast<std::size_t>(newWidth) * static_cast<std::size_t>(newHeight) * static_cast<std::size_t>(BYTES_PER_PIXEL));
-
-    if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
-        throw std::runtime_error("stbir_resize_uint8_srgb failed.");
-    }
-
-    TJHandle compressor;
-    compressor.handle = tjInitCompress();
-    if (!compressor) {
-        throw std::runtime_error("tjInitCompress() failed.");
-    }
-
-    TJBuffer jpegBuf;
-    unsigned long jpegSize = 0;
-    int subsamp = TJSAMP_440;
-    int flags = TJFLAG_PROGRESSIVE;
-
-    if (tjCompress2(compressor.get(), resized_image_vec.data(), newWidth, 0, newHeight, PIXEL_FORMAT, &jpegBuf.data, &jpegSize, subsamp, quality_val, flags) != 0) {
-        throw std::runtime_error(std::format("tjCompress2: {}", tjGetErrorStr2(compressor.get())));
-    }
-
-    image_file_vec.assign(jpegBuf.data, jpegBuf.data + jpegSize);
-}
-
-static vBytes readFile(const fs::path& path, FileTypeCheck FileType = FileTypeCheck::script_file) {
-    if (!fs::exists(path) || !fs::is_regular_file(path)) {
-        throw std::runtime_error(std::format("Error: File \"{}\" not found or not a regular file.", path.string()));
-    }
-
-    std::size_t file_size = fs::file_size(path);
-
-    if (!file_size) {
-        throw std::runtime_error("Error: File is empty.");
-    }
-
-    if (FileType == FileTypeCheck::cover_image) {
-		constexpr std::size_t
-			MINIMUM_IMAGE_SIZE = 134,
-			MAX_IMAGE_SIZE 	   = 5 * 1024 * 1024;
-
-        if (!hasFileExtension(path, {".jpg", ".jpeg", ".jfif"})) {
-			throw std::runtime_error("File Type Error: Invalid image extension. Only expecting \".jpg\", \".jpeg\", or \".jfif\".");
-        }
-		if (MINIMUM_IMAGE_SIZE > file_size) {
-			throw std::runtime_error("File Error: Invalid image file size.");
-		}
-
-		if (file_size > MAX_IMAGE_SIZE) {
-			throw std::runtime_error("Image File Error: Cover image file exceeds maximum size limit.");
-		}
-	}
-
-    if (FileType == FileTypeCheck::script_file) {
-		constexpr std::size_t
-			MAX_PWSH_SIZE = 10 * 1024,
-			MIN_PWSH_SIZE = 10;
-
-        if (MIN_PWSH_SIZE > file_size) {
-            throw std::runtime_error("Script File Error: PowerShell script is below minimum size.");
+        TJHandle& operator=(TJHandle&& other) noexcept {
+            if (this != &other) {
+                reset();
+                handle = other.handle;
+                other.handle = nullptr;
+            }
+            return *this;
         }
 
-        if (file_size > MAX_PWSH_SIZE) {
-            throw std::runtime_error("Script File Error: PowerShell script exceeds maximum size limit.");
+        ~TJHandle() {
+            reset();
         }
-		if (!hasFileExtension(path, {".ps1"})) {
-            throw std::runtime_error("File Type Error: Invalid script extension. Only expecting \".ps1\".");
+
+        void reset() {
+            if (handle) {
+                tjDestroy(handle);
+                handle = nullptr;
+            }
         }
-	}
 
-    if (!hasValidFilename(path)) {
-		throw std::runtime_error("Invalid Input Error: Unsupported characters in filename arguments.");
+        tjhandle get() const { return handle; }
+        tjhandle operator->() const { return handle; }
+        explicit operator bool() const { return handle != nullptr; }
+    };
+
+    struct TJBuffer {
+        unsigned char* data = nullptr;
+
+        TJBuffer() = default;
+        ~TJBuffer() { if (data) tjFree(data); }
+
+        TJBuffer(const TJBuffer&) = delete;
+        TJBuffer& operator=(const TJBuffer&) = delete;
+        TJBuffer(TJBuffer&&) = delete;
+        TJBuffer& operator=(TJBuffer&&) = delete;
+    };
+
+    void optimizeImage(vBytes& jpg_vec) {
+        if (jpg_vec.empty()) {
+            throw std::runtime_error("JPG image is empty!");
+        }
+
+        TJHandle transformer;
+        transformer.handle = tjInitTransform();
+        if (!transformer) {
+            throw std::runtime_error("tjInitTransform() failed");
+        }
+
+        int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
+        if (tjDecompressHeader3(transformer.get(), jpg_vec.data(), static_cast<unsigned long>(jpg_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
+            throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
+        }
+
+        if (width < 400 || height < 400) {
+            throw std::runtime_error("Image Error: Dimensions are too small.\nFor platform compatibility, cover image must be at least 300px for both width and height.");
+        }
+
+        auto ori_opt = exifOrientation(jpg_vec);
+        int xop = TJXOP_NONE;
+
+        if (ori_opt) {
+            xop = getTransformOp(*ori_opt);
+        }
+
+        tjtransform xform;
+        std::memset(&xform, 0, sizeof(tjtransform));
+        xform.op = xop;
+
+        xform.options = TJXOPT_COPYNONE | TJXOPT_TRIM | TJXOPT_PROGRESSIVE;
+
+        TJBuffer dstBuffer;
+        unsigned long dstSize = 0;
+
+        if (tjTransform(transformer.get(), jpg_vec.data(), static_cast<unsigned long>(jpg_vec.size()), 1, &dstBuffer.data, &dstSize, &xform, 0) != 0) {
+            throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
+        }
+
+        jpg_vec.assign(dstBuffer.data, dstBuffer.data + dstSize);
     }
 
-    std::ifstream file(path, std::ios::binary);
+    void resizeImage(vBytes& image_file_vec, int quality_val, int decrease_dims_val) {
+        TJHandle decompressor;
+        decompressor.handle = tjInitDecompress();
+        if (!decompressor) {
+            throw std::runtime_error("tjInitDecompress() failed.");
+        }
 
-    if (!file) {
-        throw std::runtime_error(std::format("Failed to open file: {}", path.string()));
+        int width = 0, height = 0, jpegSubsamp = 0, jpegColorspace = 0;
+        const unsigned char* JPG_IN = reinterpret_cast<const unsigned char*>(image_file_vec.data());
+
+        if (tjDecompressHeader3(decompressor.get(), JPG_IN, static_cast<unsigned long>(image_file_vec.size()), &width, &height, &jpegSubsamp, &jpegColorspace) != 0) {
+            throw std::runtime_error(std::format("tjDecompressHeader3: {}", tjGetErrorStr2(decompressor.get())));
+        }
+
+        if (width < decrease_dims_val || height < decrease_dims_val) {
+            throw std::runtime_error("Image is too small to decrease by 1 pixel.");
+        }
+
+        const int
+            PIXEL_FORMAT    = TJPF_XBGR,
+            BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];
+
+        vBytes decoded_image_vec(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * static_cast<std::size_t>(BYTES_PER_PIXEL));
+
+        if (tjDecompress2(decompressor.get(), JPG_IN, static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, PIXEL_FORMAT, 0) != 0) {
+            throw std::runtime_error(std::format("tjDecompress2: {}", tjGetErrorStr2(decompressor.get())));
+        }
+
+        decompressor.reset();
+
+        int
+            newWidth  = width  - decrease_dims_val,
+            newHeight = height - decrease_dims_val;
+
+        std::print("\r{:44}\r", "");
+        std::print("Quality: {}% | Width: {} | Height: {}", quality_val, newWidth, newHeight);
+        std::fflush(stdout);
+
+        vBytes resized_image_vec(static_cast<std::size_t>(newWidth) * static_cast<std::size_t>(newHeight) * static_cast<std::size_t>(BYTES_PER_PIXEL));
+
+        if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
+            throw std::runtime_error("stbir_resize_uint8_srgb failed.");
+        }
+
+        TJHandle compressor;
+        compressor.handle = tjInitCompress();
+        if (!compressor) {
+            throw std::runtime_error("tjInitCompress() failed.");
+        }
+
+        TJBuffer jpegBuf;
+        unsigned long jpegSize = 0;
+        int
+            subsamp = TJSAMP_440,
+            flags   = TJFLAG_PROGRESSIVE;
+
+        if (tjCompress2(compressor.get(), resized_image_vec.data(), newWidth, 0, newHeight, PIXEL_FORMAT, &jpegBuf.data, &jpegSize, subsamp, quality_val, flags) != 0) {
+            throw std::runtime_error(std::format("tjCompress2: {}", tjGetErrorStr2(compressor.get())));
+        }
+
+        image_file_vec.assign(jpegBuf.data, jpegBuf.data + jpegSize);
     }
 
-    vBytes vec(file_size);
-    file.read(reinterpret_cast<char*>(vec.data()), static_cast<std::streamsize>(file_size));
+    [[nodiscard]] vBytes readFile(const fs::path& path, FileTypeCheck FileType = FileTypeCheck::script_file) {
+        if (!fs::exists(path) || !fs::is_regular_file(path)) {
+            throw std::runtime_error(std::format("Error: File \"{}\" not found or not a regular file.", path.string()));
+        }
 
-    if (file.gcount() != static_cast<std::streamsize>(file_size)) {
-        throw std::runtime_error("Failed to read full file: partial read");
+        std::size_t file_size = fs::file_size(path);
+
+        if (!file_size) {
+            throw std::runtime_error("Error: File is empty.");
+        }
+
+        if (FileType == FileTypeCheck::cover_image) {
+            constexpr std::size_t
+                MINIMUM_IMAGE_SIZE = 134,
+                MAX_IMAGE_SIZE 	   = 5 * 1024 * 1024;
+
+            if (!hasFileExtension(path, {".jpg", ".jpeg", ".jfif"})) {
+                throw std::runtime_error("File Type Error: Invalid image extension. Only expecting \".jpg\", \".jpeg\", or \".jfif\".");
+            }
+            if (MINIMUM_IMAGE_SIZE > file_size) {
+                throw std::runtime_error("File Error: Invalid image file size.");
+            }
+
+            if (file_size > MAX_IMAGE_SIZE) {
+                throw std::runtime_error("Image File Error: Cover image file exceeds maximum size limit.");
+            }
+        }
+
+        if (FileType == FileTypeCheck::script_file) {
+            constexpr std::size_t
+                MAX_PWSH_SIZE = 10 * 1024,
+                MIN_PWSH_SIZE = 10;
+
+            if (MIN_PWSH_SIZE > file_size) {
+                throw std::runtime_error("Script File Error: PowerShell script is below minimum size.");
+            }
+
+            if (file_size > MAX_PWSH_SIZE) {
+                throw std::runtime_error("Script File Error: PowerShell script exceeds maximum size limit.");
+            }
+            if (!hasFileExtension(path, {".ps1"})) {
+                throw std::runtime_error("File Type Error: Invalid script extension. Only expecting \".ps1\".");
+            }
+        }
+
+        if (!hasValidFilename(path)) {
+            throw std::runtime_error("Invalid Input Error: Unsupported characters in filename arguments.");
+        }
+
+        std::ifstream file(path, std::ios::binary);
+
+        if (!file) {
+            throw std::runtime_error(std::format("Failed to open file: {}", path.string()));
+        }
+
+        vBytes vec(file_size);
+        file.read(reinterpret_cast<char*>(vec.data()), static_cast<std::streamsize>(file_size));
+
+        if (file.gcount() != static_cast<std::streamsize>(file_size)) {
+            throw std::runtime_error("Failed to read full file: partial read");
+        }
+        return vec;
     }
-    return vec;
 }
 
 int main(int argc, char** argv) {
@@ -519,8 +521,8 @@ int main(int argc, char** argv) {
         vBytes image_file_vec_copy;
 
         constexpr std::size_t MARKER_INDEX = 0x0D;
-        if (image_file_vec[MARKER_INDEX] != COMPATIBLE_IMAGE_VAL) {
 
+        if (image_file_vec[MARKER_INDEX] != COMPATIBLE_IMAGE_VAL) {
             int quality_val = 97, decrease_attempts = 300, decrease_dims_val = 0;
 
             std::println("\nChecking cover image for comment-block close sequences \"#>\" (0x23, 0x3E).\n");
