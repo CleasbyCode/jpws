@@ -18,7 +18,7 @@ user1@linuxbox:~/Downloads/src$ Compilation successful. Executable 'jpws' create
 user1@linuxbox:~/Downloads/src$ sudo cp jpws /usr/bin
 user1@linuxbox:~/Desktop$ jpws
 
-Usage: jpws [-alt] <cover_image> <powershell_script>  
+Usage: jpws [-alt] <cover_image> <pwsh_script>  
        jpws --info
 
 user1@linuxbox:~/Desktop$ jpws dragon.jpg sinewave.ps1
