@@ -8022,7 +8022,8 @@ static void * stbir_quick_resize_helper( const void *input_pixels , int input_w 
   void * start_ptr;
   void * free_ptr;
 
-  scanline_output_in_bytes = output_w * stbir__type_size[ data_type ] * stbir__pixel_channels[ pixel_layout ];
+ // scanline_output_in_bytes = output_w * stbir__type_size[ data_type ] * stbir__pixel_channels[ pixel_layout ];
+ scanline_output_in_bytes = output_w * stbir__type_size[ data_type ] * stbir__pixel_channels[ stbir__pixel_layout_convert_public_to_internal[ pixel_layout ] ];
   if ( scanline_output_in_bytes == 0 )
     return 0;
 
