@@ -25,6 +25,10 @@
 #include <stdexcept>
 
 namespace {
+    constexpr int MIN_COVER_IMAGE_DIMENSION = 400;
+    constexpr int MAX_COVER_IMAGE_DIMENSION = 8'192;
+    constexpr std::size_t MAX_COVER_IMAGE_PIXELS = 25'000'000;
+
     // Default limit of 0 means "Search Whole File".
     // Any other value means "Search ONLY up to this limit".
     [[nodiscard]] std::optional<std::size_t> searchSig(std::span<const Byte> v, std::span<const Byte> sig, std::size_t limit = 0) {
@@ -38,6 +42,58 @@ namespace {
         return static_cast<std::size_t>(it.begin() - v.begin());
     }
 
+    void validateImageDimensions(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw std::runtime_error("Image Error: Invalid image dimensions.");
+        }
+
+        if (width < MIN_COVER_IMAGE_DIMENSION || height < MIN_COVER_IMAGE_DIMENSION) {
+            throw std::runtime_error("Image Error: Dimensions are too small.\nFor platform compatibility, cover image must be at least 400px for both width and height.");
+        }
+
+        if (width > MAX_COVER_IMAGE_DIMENSION || height > MAX_COVER_IMAGE_DIMENSION) {
+            throw std::runtime_error(std::format("Image Error: Dimensions exceed the supported maximum of {}px.", MAX_COVER_IMAGE_DIMENSION));
+        }
+
+        const auto pixel_count = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+
+        if (pixel_count > MAX_COVER_IMAGE_PIXELS) {
+            throw std::runtime_error("Image Error: Pixel count exceeds the supported maximum of 25 megapixels.");
+        }
+    }
+
+    [[nodiscard]] std::size_t checkedPixelBufferSize(int width, int height, int bytes_per_pixel) {
+        if (width <= 0 || height <= 0) {
+            throw std::runtime_error("Image Error: Invalid image dimensions.");
+        }
+
+        if (bytes_per_pixel <= 0) {
+            throw std::runtime_error("Image Error: Invalid pixel format.");
+        }
+
+        const auto pixel_count = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+
+        if (pixel_count > MAX_COVER_IMAGE_PIXELS) {
+            throw std::runtime_error("Image Error: Pixel count exceeds the supported maximum of 25 megapixels.");
+        }
+
+        if (pixel_count > std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(bytes_per_pixel)) {
+            throw std::runtime_error("Image dimensions too large for pixel buffer allocation.");
+        }
+
+        return pixel_count * static_cast<std::size_t>(bytes_per_pixel);
+    }
+
+    [[nodiscard]] bool hasCompatibleJfifHeader(std::span<const Byte> jpg) {
+        constexpr auto COMPATIBLE_JFIF_SIG = std::to_array<Byte>({
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46,
+            0x00, 0x01, 0x01, 0x19, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00
+        });
+
+        return jpg.size() >= COMPATIBLE_JFIF_SIG.size() &&
+               std::ranges::equal(jpg.first(COMPATIBLE_JFIF_SIG.size()), COMPATIBLE_JFIF_SIG);
+    }
+
     [[nodiscard]] std::optional<uint16_t> exifOrientation(std::span<const Byte> jpg) {
         constexpr std::size_t EXIF_SEARCH_LIMIT = 4096;
         constexpr auto APP1_SIG = std::to_array<Byte>({0xFF, 0xE1});
@@ -49,7 +105,7 @@ namespace {
 
         if (pos + 4 > jpg.size()) return std::nullopt;
 
-        uint16_t segment_length = (static_cast<uint16_t>(jpg[pos + 2]) << 8) | jpg[pos + 3];
+        uint16_t segment_length = static_cast<uint16_t>((static_cast<uint16_t>(jpg[pos + 2]) << 8) | static_cast<uint16_t>(jpg[pos + 3]));
         std::size_t exif_end = pos + 2 + segment_length;
 
         if (segment_length < 2 || exif_end > jpg.size()) return std::nullopt;
@@ -161,6 +217,23 @@ namespace {
         explicit operator bool() const { return handle != nullptr; }
     };
 
+    void validateJpegHeader(std::span<const Byte> jpg) {
+        TJHandle decompressor;
+        decompressor.handle = tjInitDecompress();
+
+        if (!decompressor) {
+            throw std::runtime_error("tjInitDecompress() failed.");
+        }
+
+        int width = 0, height = 0, jpeg_subsamp = 0, jpeg_colorspace = 0;
+
+        if (tjDecompressHeader3(decompressor.get(), jpg.data(), static_cast<unsigned long>(jpg.size()), &width, &height, &jpeg_subsamp, &jpeg_colorspace) != 0) {
+            throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(decompressor.get())));
+        }
+
+        validateImageDimensions(width, height);
+    }
+
     struct TJBuffer {
         unsigned char* data = nullptr;
 
@@ -200,9 +273,7 @@ namespace {
             throw std::runtime_error(std::format("Image Error: {}", tjGetErrorStr2(transformer.get())));
         }
 
-        if (width < 400 || height < 400) {
-            throw std::runtime_error("Image Error: Dimensions are too small.\nFor platform compatibility, cover image must be at least 400px for both width and height.");
-        }
+        validateImageDimensions(width, height);
 
         auto ori_opt = exifOrientation(jpg_vec);
         int xop = TJXOP_NONE;
@@ -239,6 +310,8 @@ namespace {
             throw std::runtime_error(std::format("tjDecompressHeader3: {}", tjGetErrorStr2(decompressor.get())));
         }
 
+        validateImageDimensions(width, height);
+
         if (width < decrease_dims_val || height < decrease_dims_val) {
             throw std::runtime_error(std::format("Image is too small to decrease by {} pixels.", decrease_dims_val));
         }
@@ -247,12 +320,7 @@ namespace {
             PIXEL_FORMAT    = TJPF_XBGR,
             BYTES_PER_PIXEL = tjPixelSize[PIXEL_FORMAT];
 
-        const auto pixel_count = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-        if (pixel_count > std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(BYTES_PER_PIXEL)) {
-            throw std::runtime_error("Image dimensions too large for pixel buffer allocation.");
-        }
-
-        vBytes decoded_image_vec(pixel_count * static_cast<std::size_t>(BYTES_PER_PIXEL));
+        vBytes decoded_image_vec(checkedPixelBufferSize(width, height, BYTES_PER_PIXEL));
 
         if (tjDecompress2(decompressor.get(), image_file_vec.data(), static_cast<unsigned long>(image_file_vec.size()), decoded_image_vec.data(), width, 0, height, PIXEL_FORMAT, 0) != 0) {
             throw std::runtime_error(std::format("tjDecompress2: {}", tjGetErrorStr2(decompressor.get())));
@@ -264,12 +332,15 @@ namespace {
             newWidth  = width  - decrease_dims_val,
             newHeight = height - decrease_dims_val;
 
+        if (newWidth < MIN_COVER_IMAGE_DIMENSION || newHeight < MIN_COVER_IMAGE_DIMENSION) {
+            throw std::runtime_error("Image Compatibility Error: Unable to remove close-comment block sequences without shrinking below the 400px minimum.");
+        }
+
         std::print("\r{:44}\r", "");
         std::print("Quality: {}% | Width: {} | Height: {}", quality_val, newWidth, newHeight);
         std::fflush(stdout);
 
-        const auto new_pixel_count = static_cast<std::size_t>(newWidth) * static_cast<std::size_t>(newHeight);
-        vBytes resized_image_vec(new_pixel_count * static_cast<std::size_t>(BYTES_PER_PIXEL));
+        vBytes resized_image_vec(checkedPixelBufferSize(newWidth, newHeight, BYTES_PER_PIXEL));
 
         if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
             throw std::runtime_error("stbir_resize_uint8_srgb failed.");
@@ -296,14 +367,18 @@ namespace {
 }
 
 bool ensureImageCompatible(vBytes& image_file_vec) {
-    constexpr Byte COMPATIBLE_IMAGE_VAL = 0x19;
     constexpr std::size_t MARKER_INDEX = 0x0D;
+    constexpr auto COMMENT_BLOCK_SIG = std::to_array<Byte>({ 0x23, 0x3E });
 
     if (image_file_vec.size() <= MARKER_INDEX) {
         throw std::runtime_error("Image File Error: Image too small to process.");
     }
 
-    if (image_file_vec[MARKER_INDEX] == COMPATIBLE_IMAGE_VAL) {
+    validateJpegHeader(image_file_vec);
+
+    if (image_file_vec[MARKER_INDEX] == 0x19 &&
+        hasCompatibleJfifHeader(image_file_vec) &&
+        !searchSig(image_file_vec, COMMENT_BLOCK_SIG)) {
         return false;
     }
 
@@ -315,8 +390,6 @@ bool ensureImageCompatible(vBytes& image_file_vec) {
     optimizeImage(image_file_vec);
 
     constexpr std::size_t DQT_SEARCH_LIMIT = 100;
-
-    constexpr auto COMMENT_BLOCK_SIG = std::to_array<Byte>({ 0x23, 0x3E });
 
     constexpr auto
         DQT1_SIG = std::to_array<Byte>({ 0xFF, 0xDB, 0x00, 0x43 }),

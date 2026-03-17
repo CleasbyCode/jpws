@@ -19,9 +19,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstddef>
+#include <cstdint>
+#include <fcntl.h>
 #include <format>
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <print>
@@ -29,9 +31,50 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <unistd.h>
 #include <utility>
 
 namespace {
+    class UniqueFd {
+    public:
+        explicit UniqueFd(int fd = -1) noexcept : fd_(fd) {}
+
+        UniqueFd(const UniqueFd&) = delete;
+        UniqueFd& operator=(const UniqueFd&) = delete;
+
+        UniqueFd(UniqueFd&& other) noexcept : fd_(other.release()) {}
+
+        UniqueFd& operator=(UniqueFd&& other) noexcept {
+            if (this != &other) {
+                reset(other.release());
+            }
+            return *this;
+        }
+
+        ~UniqueFd() {
+            reset();
+        }
+
+        [[nodiscard]] int get() const noexcept { return fd_; }
+
+        [[nodiscard]] int release() noexcept {
+            const int released_fd = fd_;
+            fd_ = -1;
+            return released_fd;
+        }
+
+        void reset(int new_fd = -1) noexcept {
+            if (fd_ >= 0) {
+                ::close(fd_);
+            }
+            fd_ = new_fd;
+        }
+
+    private:
+        int fd_;
+    };
+
     void writeBigEndian(vBytes& vec, std::size_t index, std::size_t value, std::size_t bytes) {
         if (bytes == 0 || bytes > sizeof(std::size_t)) {
             throw std::runtime_error("writeBigEndian: invalid byte count.");
@@ -66,6 +109,78 @@ namespace {
         0x14, 0xB1, 0x1C, 0x80, 0x25, 0xC8, 0x30, 0xA1, 0x3D, 0x19, 0x4B, 0x40, 0x5B, 0x27, 0x6C, 0xDB, 0x80, 0x6B, 0x95, 0xE3, 0xAD, 0x50, 0xC6, 0xC2, 0xE2, 0x31,
         0xFF, 0xFF, 0x23, 0x3E, 0x63, 0x6C, 0x73, 0x3B, 0x0D, 0x0A, 0x3C, 0x23, 0x0D, 0x0A
     });
+
+    [[nodiscard]] std::string randomOutputSuffix(std::random_device& rd) {
+        constexpr std::uint64_t OUTPUT_SUFFIX_MASK = (std::uint64_t{1} << 52) - 1;
+
+        const std::uint64_t random_value =
+            ((static_cast<std::uint64_t>(rd()) << 32) | static_cast<std::uint64_t>(rd())) &
+            OUTPUT_SUFFIX_MASK;
+
+        return std::format("{:013x}", random_value);
+    }
+
+    [[nodiscard]] std::string writeOutputFile(const vBytes& bytes) {
+        constexpr mode_t OUTPUT_MODE = S_IRUSR | S_IWUSR;
+        constexpr int OUTPUT_FLAGS = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW;
+        constexpr int MAX_OUTPUT_ATTEMPTS = 64;
+
+        std::random_device rd;
+
+        for (int attempt = 0; attempt < MAX_OUTPUT_ATTEMPTS; ++attempt) {
+            std::string output_filename = std::format("jpws_{}.jpg", randomOutputSuffix(rd));
+            UniqueFd output_fd(::open(output_filename.c_str(), OUTPUT_FLAGS, OUTPUT_MODE));
+
+            if (output_fd.get() < 0) {
+                const int error_code = errno;
+
+                if (error_code == EEXIST) {
+                    continue;
+                }
+
+                throw std::runtime_error(std::format("Write Error: Unable to create output file: {}", std::system_category().message(error_code)));
+            }
+
+            std::size_t total_written = 0;
+
+            while (total_written < bytes.size()) {
+                const auto remaining = bytes.size() - total_written;
+                const auto chunk_size = std::min<std::size_t>(remaining, static_cast<std::size_t>(std::numeric_limits<ssize_t>::max()));
+                const auto* write_ptr = bytes.data() + static_cast<std::ptrdiff_t>(total_written);
+
+                const auto bytes_written = ::write(output_fd.get(), write_ptr, chunk_size);
+
+                if (bytes_written < 0) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+
+                    const int error_code = errno;
+                    ::unlink(output_filename.c_str());
+                    throw std::runtime_error(std::format("Write Error: Failed to write output file: {}", std::system_category().message(error_code)));
+                }
+
+                if (bytes_written == 0) {
+                    ::unlink(output_filename.c_str());
+                    throw std::runtime_error("Write Error: Failed to write complete output file.");
+                }
+
+                total_written += static_cast<std::size_t>(bytes_written);
+            }
+
+            const int raw_fd = output_fd.release();
+
+            if (::close(raw_fd) != 0) {
+                const int error_code = errno;
+                ::unlink(output_filename.c_str());
+                throw std::runtime_error(std::format("Write Error: Failed to close output file: {}", std::system_category().message(error_code)));
+            }
+
+            return output_filename;
+        }
+
+        throw std::runtime_error("Write Error: Unable to create a unique output filename after multiple attempts.");
+    }
 }
 
 int main(int argc, char** argv) {
@@ -154,27 +269,8 @@ int main(int argc, char** argv) {
         }
         std::ranges::copy(JFIF_COMMENT_BLOCK, image_file_vec.begin() + JFIF_COMMENT_BLOCK_INDEX);
 
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> dist(10000, 99999);
-
-        const std::string OUTPUT_FILENAME = std::format("jpws_{}.jpg", dist(gen));
-
-        std::ofstream file_ofs(OUTPUT_FILENAME, std::ios::binary);
-
-        if (!file_ofs) {
-            throw std::runtime_error("Write Error: Unable to write to file.");
-        }
-
         const std::size_t IMAGE_SIZE = image_file_vec.size();
-
-        file_ofs.write(reinterpret_cast<const char*>(image_file_vec.data()), static_cast<std::streamsize>(IMAGE_SIZE));
-
-        if (!file_ofs.good()) {
-            throw std::runtime_error("Write Error: Failed to write complete output file.");
-        }
-
-        file_ofs.close();
+        const std::string OUTPUT_FILENAME = writeOutputFile(image_file_vec);
 
         std::println("\nSaved JPG-PowerShell polyglot image: {} ({} bytes).", OUTPUT_FILENAME, IMAGE_SIZE);
 
