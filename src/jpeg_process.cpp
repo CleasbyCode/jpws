@@ -342,7 +342,7 @@ namespace {
 
         vBytes resized_image_vec(checkedPixelBufferSize(newWidth, newHeight, BYTES_PER_PIXEL));
 
-        if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, static_cast<stbir_pixel_layout>(BYTES_PER_PIXEL))) {
+        if (!stbir_resize_uint8_srgb(decoded_image_vec.data(), width, height, 0, resized_image_vec.data(), newWidth, newHeight, 0, STBIR_4CHANNEL)) {
             throw std::runtime_error("stbir_resize_uint8_srgb failed.");
         }
 
