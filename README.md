@@ -68,14 +68,15 @@ This makes ***PowerShell*** treat the following ***JPG*** header/profile bytes a
 
 (2) ***PowerShell*** script inside the ***APP2/ICC*** profile
 
-The ***PowerShell*** payload is inserted into an ***APP2 ICC*** profile segment.
+The ***PowerShell*** payload is inserted into an ***APP2 ICC*** profile segment.  
 ***X-Twitter*** preserves this first ***APP2/ICC*** segment, including the embedded script.
 
 The profile template contains a close-comment sequence before the script:
 
   ***#>cls;***
 
-That closes the initial block comment and begins executable ***PowerShell***. The user's script is inserted after that.
+That closes the initial block comment and begins executable ***PowerShell***.  
+The user's script is inserted after that.
 
 After the script, the profile template opens another block comment:
 
