@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/f5b87dbf-885e-4cb5-a70c-5879c82f7e20
 
 ## How It Works
 
-*Note: When downloading images from ***X-Twitter***, always click the image in the post to ***FULLY EXPAND*** it before saving. This ensures you get the original size image with all the embedded data.*
+*Note: When downloading images from ***X-Twitter***, always click the image in the post to ***FULLY EXPAND*** it before saving. This ensures you get the original size image with the embedded payload.*
 
 ***jpws*** creates a ***JPG-PowerShell*** polyglot: the same file is still a displayable ***JPG*** image, but ***PowerShell*** can also parse it as a script.
 The trick is ***PowerShell*** block comments. ***PowerShell*** ignores everything between:
@@ -43,7 +43,8 @@ and:
   ***#>***
 
 ***JPG*** decoders ignore or tolerate the non-image data that ***jpws*** uses for the ***PowerShell*** payload.  
-The embedded ***PowerShell*** script works only if the comment boundaries survive the round trip through ***X-Twitter***.
+
+The ***PowerShell*** script works only if the comment boundaries survive the round trip through ***X-Twitter***.
 
 ## High-Level Layout  
 
