@@ -222,9 +222,9 @@ Some images that fail with one tail layout will work with the other.
 
 If both fail, the practical options are:
 
-  Try a different cover image.
-  Crop or scale the image externally and run ***jpws*** again.
-  Re-save the image through an editor, then run ***jpws*** again.
+  Try a different cover image.  
+  Crop or scale the image externally and run ***jpws*** again.  
+  Re-save the image through an editor, then run ***jpws*** again.  
   Generate several ***jpws*** outputs and test them through ***X-Twitter***.
 
 ## Executing Embedded PowerShell Script
