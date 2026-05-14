@@ -218,7 +218,7 @@ If the downloaded ***X-Twitter*** image no longer contains a correct / working f
   ***$ jpws -alt cover_image.jpg script.ps1***
 
 The two modes place the final ***"#>"*** in different positions within the last 10 bytes before ***EOI***.  
-Some images that fail with one tail layout work with the other.
+Some images that fail with one tail layout will work with the other.
 
 If both fail, the practical options are:
 
