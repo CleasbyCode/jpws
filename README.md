@@ -235,6 +235,7 @@ The easiest way to download the image from ***X-Twitter*** and run the embedded 
 You will first need to get the image link address from ***X-Twitter***, after you have posted the image.
 
 Click the image in the post to fully expand it, then ***right-click*** on the image and select "***Copy image address***" from the menu.  
+
 You can then paste the image address as part of the ***wget*** or ***iwr*** command, for example: 
 
 Linux:
