@@ -142,8 +142,8 @@ If no ***"#>"*** sequence remains, the image can be used.
 If the byte sequence ***"#>"*** is still present, ***jpws*** first tries same-dimension recompression.  
 It uses progressive ***4:4:4 JPG*** only, trying these ***DCT*** variants:
 
-  ***4:4:4 default***
-  ***4:4:4 accurate***
+  ***4:4:4 default***  
+  ***4:4:4 accurate***  
   ***4:4:4 fast***
 
 Quality starts at 97 and decreases down to 75.
