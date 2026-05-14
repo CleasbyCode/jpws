@@ -12,7 +12,7 @@ namespace {
     void printInfo() {
         std::print(R"(
 
-JPG-PowerShell Polyglot for X-Twitter (jpws v1.9)
+JPG-PowerShell Polyglot for X-Twitter (jpws v2.1)
 Created by Nicholas Cleasby (@CleasbyCode) 12/12/2024
 
 CLI tool for embedding a PowerShell script within a JPG image,
