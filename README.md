@@ -178,6 +178,7 @@ If one of those appears, ***jpws*** retries by generating another progressive **
   ***premature end of data segment***
 
 That warning is expected for many successful tail-patched images.  
+
 Outputs with ***"premature end of data segment"*** have been more likely to survive ***X-Twitter*** than outputs with ***"extraneous bytes before marker 0xD9"***.
 
 This is not a guarantee. It is just the best local signal found so far.
