@@ -90,7 +90,8 @@ That comments out the rest of the ***JPG*** bytes until ***jpws*** supplies the 
 
 This is the fragile part.
 
-***jpws*** currently overwrites the last 10 bytes of compressed image data before the ***JPG*** EOI marker (FF D9).
+***jpws*** currently overwrites the last 10 bytes of compressed image data before the ***JPG*** EOI marker (FF D9).  
+
 It does not insert an extra ***JPG*** marker segment for the tail, because ***X-Twitter*** strips post-scan ***COM*** segments and a second post-scan ***APP2/ICC-style*** segment.
 
 The default tail bytes are currently:
