@@ -267,33 +267,33 @@ https://github.com/user-attachments/assets/2e49ea69-7e33-4b43-bcba-cb0a9678a4f7
 
 ## Limits
 
-Current limits enforced by the program:
+Current limits enforced by the program:  
 
-  Cover image extension: .jpg, .jpeg, or .jfif
-  Cover image size: maximum 5 MB
-  Script extension: .ps1
-  Script size: maximum about 10 KB  
+ Cover image extension: .jpg, .jpeg, or .jfif  
+ Cover image size: maximum 5 MB  
+ Script extension: .ps1  
+ Script size: maximum about 10 KB  
+ 
+ ***PowerShell*** scripts that use a top "script-level" ***param(...) block*** will ***not work*** when embedded within an image.  
+ The param block enforces strict parsing at the start of the script.  
+ The only things allowed before the param block are comments or blank lines (and sometimes a #requires statement).  
+ Having certain binary bytes before param will break parsing. A param block inside a function, rather than at the top of the script, should work fine.  
   
-  ***PowerShell*** scripts that use a top "script-level" ***param(...) block*** will ***not work*** when embedded within an image.
-  The param block enforces strict parsing at the start of the script.  
-  The only things allowed before the param block are comments or blank lines (and sometimes a #requires statement).
-  Having certain binary bytes before param will break parsing. A param block inside a function, rather than at the top of the script, should work fine.  
-  
-  Cover image dimensions: at least 400x400 pixels
-  Cover image dimensions: no more than 8192 pixels in either dimension
-  Cover image pixels: no more than 25 megapixels
+Cover image dimensions: at least 400x400 pixels  
+Cover image dimensions: no more than 8192 pixels in either dimension  
+Cover image pixels: no more than 25 megapixels
 
 ## Summary
 
-***jpws*** works by:
+***jpws*** works by:  
 
-  Opening a ***PowerShell*** block comment near the start of the ***JPG***.
-  Storing the ***PowerShell*** script inside an ***APP2/ICC*** profile segment.
-  Reopening a ***PowerShell*** block comment after the script.
-  Closing that final block comment by patching a ***"#>"*** tail into the compressed image data immediately before ***FF D9***.
-  Keeping all generated ***JPGs*** progressive.
-  Recompressing/resizing the cover image with progressive ***4:4:4*** encoding until any ***"#>"*** byte sequences are removed.
-  Checking local ***JPG*** warnings and retrying when the tail shape looks unsafe.
+Opening a ***PowerShell*** block comment near the start of the ***JPG***.  
+Storing the ***PowerShell*** script inside an ***APP2/ICC*** profile segment.  
+Reopening a ***PowerShell*** block comment after the script.  
+Closing that final block comment by patching a ***"#>"*** tail into the compressed image data immediately before ***FF D9***.  
+Keeping all generated ***JPGs*** progressive.  
+Recompressing/resizing the cover image with progressive ***4:4:4*** encoding until any ***"#>"*** byte sequences are removed.  
+Checking local ***JPG*** warnings and retrying when the tail shape looks unsafe.  
 
 The method is inherently dependent on ***X-Twitter*** preserving a small patched tail.  
 The default and ***"-alt"*** option tails are both workarounds for that black-box behavior.
