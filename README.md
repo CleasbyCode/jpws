@@ -29,7 +29,7 @@ Complete!
 ```
 https://github.com/user-attachments/assets/f5b87dbf-885e-4cb5-a70c-5879c82f7e20
 
-## JPWS & How It Works
+## How It Works
 
 **Note: When downloading images from ***X-Twitter***, always click the image in the post to ***FULLY EXPAND*** it before saving. This ensures you get the original size image with all the embedded data.**
 
@@ -48,7 +48,6 @@ The embedded ***PowerShell*** script works only if the comment boundaries surviv
 ## High-Level Layout
 
 1. Opening ***PowerShell*** comment block
------------------------------------------
 
 ***jpws*** writes an opening ***"<#"*** sequence into the ***JFIF APP0*** area near the beginning of the file.
 The current bytes written at the ***JFIF*** comment-block location are:
@@ -67,7 +66,6 @@ This makes ***PowerShell*** treat the following ***JPG*** header/profile bytes a
 ![JFIF Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/first_block.png)
 
 2. ***PowerShell*** script inside the ***APP2/ICC*** profile
-------------------------------------------------------------
 
 The ***PowerShell*** payload is inserted into an ***APP2 ICC*** profile segment.
 ***X-Twitter*** preserves this first ***APP2/ICC*** segment, including the embedded script.
@@ -85,7 +83,6 @@ After the script, the profile template opens another block comment:
 That comments out the rest of the ***JPG*** bytes until ***jpws*** supplies the final close-comment sequence near the end of the file.
 
 3. Final close-comment tail
----------------------------
 
 ***PowerShell*** requires the final block comment to be closed. Therefore ***jpws*** must place a final "#>" near the end of the ***JPG***.
 
