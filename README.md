@@ -123,7 +123,7 @@ extra bytes after the close marker survive, they are more likely to be ignored b
 
 ## Cover Image Compatibility
 
-The cover image must not contain any ***"#>" (0x23, 0x3C)*** byte sequence, apart from jpws own required sequences. If the cover image contains an
+The cover image must not contain any ***"#>" (0x23, 0x3C)*** byte sequence, apart from the ***jpws*** required sequences. If the cover image contains an
 close-comment "#>" sequence, ***PowerShell*** will close the comment too early and then try to execute ***JPG*** bytes and the script will fail.
 
 ***jpws*** checks for these sequences and modifies the cover image when needed.
