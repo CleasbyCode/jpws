@@ -139,7 +139,8 @@ The current process is:
 
 If no ***"#>"*** sequence remains, the image can be used.
 
-If the byte sequence ***"#>"*** is still present, ***jpws*** first tries same-dimension recompression. It uses progressive ***4:4:4 JPG*** only, trying these ***DCT*** variants:
+If the byte sequence ***"#>"*** is still present, ***jpws*** first tries same-dimension recompression.  
+It uses progressive ***4:4:4 JPG*** only, trying these ***DCT*** variants:
 
   ***4:4:4 default***
   ***4:4:4 accurate***
@@ -147,9 +148,11 @@ If the byte sequence ***"#>"*** is still present, ***jpws*** first tries same-di
 
 Quality starts at 97 and decreases down to 75.
 
-If same-dimension recompression still cannot remove the ***"#>"*** byte sequences, ***jpws*** tries resizing.  
-Each resize attempt reduces both width and height by one more pixel, up to 300 attempts. 
+If same-dimension recompression still cannot remove the ***"#>"*** byte sequences, ***jpws*** tries resizing.    
+
+Each resize attempt reduces both width and height by one more pixel, up to 300 attempts.  
 Resize encoding also uses progressive ***4:4:4*** only, with the same default/accurate/fast variants.  
+
 Quality is reduced by 2 every 15 resize attempts.
 
 The image dimensions must stay at least 400x400 pixels.
