@@ -211,11 +211,11 @@ Always click the posted image to fully expand it before saving. Otherwise you ma
 
 Use the default mode first:
 
-  ***jpws cover_image.jpg script.ps1***
+  ***$ jpws cover_image.jpg script.ps1***
 
 If the downloaded ***X-Twitter*** image no longer contains a correct / working final tail, try:
 
-  ***jpws -alt cover_image.jpg script.ps1***
+  ***$ jpws -alt cover_image.jpg script.ps1***
 
 The two modes place the final ***"#>"*** in different positions within the last 10 bytes before ***EOI***.  
 Some images that fail with one tail layout work with the other.
