@@ -11,7 +11,7 @@ PowerShell "text-sine.ps1" [Darren Shaw / @gierrofo](https://x.com/gierrofo)}***
 
 ```console
 
-user1@linuxbox:~/Downloads/src$ sudo apt install libturbojpeg0-dev
+user1@linuxbox:~/Downloads/src$ sudo apt install libturbojpeg0-dev libjpeg-dev
 user1@linuxbox:~/Downloads/src$ chmod +x compile_jpws.sh
 user1@linuxbox:~/Downloads/src$ ./compile_jpws.sh
 user1@linuxbox:~/Downloads/src$ Compilation successful. Executable 'jpws' created.
