@@ -124,8 +124,9 @@ extra bytes after the close marker survive, they are more likely to be ignored b
 
 ## Cover Image Compatibility
 
-The cover image must not contain any ***"#>" (0x23, 0x3E)*** byte sequence, apart from the ***jpws*** required sequences. If the cover image contains a
-close-comment "#>" sequence, ***PowerShell*** will close the comment too early and then try to execute ***JPG*** bytes and the script will fail.
+The cover image must not contain any ***"#>" (0x23, 0x3E)*** byte sequence, apart from the ***jpws*** required sequences.  
+
+If the cover image contains a close-comment "#>" sequence, ***PowerShell*** will close the comment too early and then try to execute ***JPG*** bytes and the script will fail.
 
 ***jpws*** checks for these sequences and modifies the cover image when needed.
 
@@ -171,7 +172,11 @@ The warning check is only a local heuristic. It is not a perfect ***X-Twitter***
   ***premature EOF***
   ***fatal JPEG decode errors***
 
-If one of those appears, ***jpws*** prints a warning but still keeps the tail-patched image as-is. It no longer re-encodes the cover image in response to a tail warning: re-encoding was found to reduce ***X-Twitter*** compatibility, because the re-encoded compressed data was less likely to preserve the final ***"#>"*** through ***X-Twitter's*** processing. Once the cover image is comment-block free, it is left untouched.
+If one of those appears, ***jpws*** prints a warning but still keeps the tail-patched image as-is.  
+
+It no longer re-encodes the cover image in response to a tail warning: re-encoding was found to reduce ***X-Twitter*** compatibility, because the re-encoded compressed data was less likely to preserve the final ***"#>"*** through ***X-Twitter's*** processing.  
+
+Once the cover image is comment-block free, it is left untouched.
 
 ***jpws*** treats this warning as expected:
 
@@ -240,12 +245,12 @@ You can then paste the image address as part of the ***wget*** or ***iwr*** comm
 
 Linux:
 ```console
-wget -O game.jpg "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";pwsh game.jpg <script_arguments>
+$ wget -O game.jpg "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";pwsh game.jpg <script_arguments>
 ```
 
 Windows:
 ```console
-iwr -OutFile Game.ps1 "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";.\Game.ps1 <script_arguments>
+G:\demo> iwr -OutFile Game.ps1 "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";.\Game.ps1 <script_arguments>
 ```
 
 Alternatively, just manually save/download the image from ***X-Twitter*** (Click image within the post to fully expand it before saving).
@@ -309,6 +314,7 @@ This project makes use of the following third-party libraries:
 
 [stb_image](https://github.com/nothings/stb) by Sean Barrett (“nothings”)
 
-libjpeg-turbo (see [***LICENSE***](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md) file)
+libjpeg-turbo (see [***LICENSE***](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md) file)  
+
 {This software is based in part on the work of the Independent JPEG Group.}
 
