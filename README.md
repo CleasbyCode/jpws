@@ -12,17 +12,17 @@ Embed a ***PowerShell*** script within a ***JPG*** image to create a postable **
 
 ```console
 
-user1@linuxbox:~/Downloads/src$ sudo apt install libturbojpeg0-dev libjpeg-dev
-user1@linuxbox:~/Downloads/src$ chmod +x compile_jpws.sh
-user1@linuxbox:~/Downloads/src$ ./compile_jpws.sh
-user1@linuxbox:~/Downloads/src$ Compilation successful. Executable 'jpws' created.
-user1@linuxbox:~/Downloads/src$ sudo cp jpws /usr/bin
-user1@linuxbox:~/Desktop$ jpws
+$ sudo apt install libturbojpeg0-dev libjpeg-dev
+$ chmod +x compile_jpws.sh
+$ ./compile_jpws.sh
+$ Compilation successful. Executable 'jpws' created.
+$ sudo cp jpws /usr/bin
+$ jpws
 
 Usage: jpws [-alt] <cover_image> <pwsh_script>
        jpws --info
 
-user1@linuxbox:~/Desktop$ jpws dragon.jpg sinewave.ps1
+$ jpws dragon.jpg sinewave.ps1
 
 Saved JPG-PowerShell polyglot image: jpws_10a2f7c934bd1.jpg (121098 bytes).
 
@@ -275,9 +275,14 @@ Current limits enforced by the program:
  Script size: maximum about 10 KB  
  
  ***PowerShell*** scripts that use a top "script-level" ***param(...) block*** do ***not work reliably*** when embedded within an image.  
+ 
  Depending on the script, the embedded ***param*** block is either ignored (the script still runs, but its named parameters do not bind) or it stops the script from running at all.  
+ 
  This is because the embedded script runs after a leading ***"cls;"***, so the ***param*** block is no longer the first statement, and only comments or blank lines (and sometimes a #requires statement) are allowed before it.  
- ***jpws*** detects a leading ***param*** block and prints a warning, but still generates the image. To read runtime switches, use ***$args*** instead, e.g. ***$Music = $args -contains '-Music'***. A ***param*** block inside a function, rather than at the top of the script, is fine.  
+ 
+ ***jpws*** detects a leading ***param*** block and prints a warning, but still generates the image. To read runtime switches, use ***$args*** instead, e.g. ***$Music = $args -contains '-Music'***.  
+ 
+ A ***param*** block inside a function, rather than at the top of the script, is fine.  
   
 Cover image dimensions: at least 400x400 pixels  
 Cover image dimensions: no more than 8192 pixels in either dimension  
