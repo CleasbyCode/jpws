@@ -240,12 +240,12 @@ You can then paste the image address as part of the ***wget*** or ***iwr*** comm
 
 Linux:
 ```console
-wget -O game.jpg "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";pwsh game.jpg
+wget -O game.jpg "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";pwsh game.jpg <script_arguments>
 ```
 
 Windows:
 ```console
-iwr -OutFile Game.ps1 "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";.\Game.ps1
+iwr -OutFile Game.ps1 "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";.\Game.ps1 <script_arguments>
 ```
 
 Alternatively, just manually save/download the image from ***X-Twitter*** (Click image within the post to fully expand it before saving).
@@ -253,7 +253,7 @@ Alternatively, just manually save/download the image from ***X-Twitter*** (Click
 To run the script embedded within the image using Linux, just enter the following command within a terminal.
 
 ```console
-$ pwsh your_downloaded_image_name.jpg
+$ pwsh your_downloaded_image_name.jpg <script_arguments>
 ```
 For Windows, after downloading the image from ***X-Twitter***, you will need to rename the ***.jpg*** file extension to ***.ps1***, also, depending on the Windows/PowerShell execution policy,
 you will probably need to unblock the file before you can run the embedded script. 
@@ -261,7 +261,7 @@ you will probably need to unblock the file before you can run the embedded scrip
 ```console
 G:\demo> ren your_downloaded_image_name.jpg your_downloaded_image_name.ps1
 G:\demo> Unblock-File your_downloaded_image_name.ps1 
-G:\demo> powershell (or pwsh) -ExecutionPolicy Bypass -File .\your_downloaded_image_name.ps1
+G:\demo> powershell (or pwsh) -ExecutionPolicy Bypass -File .\your_downloaded_image_name.ps1 <script_arguments>
 ```
 https://github.com/user-attachments/assets/2e49ea69-7e33-4b43-bcba-cb0a9678a4f7
 
