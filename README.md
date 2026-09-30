@@ -293,7 +293,7 @@ Reopening a ***PowerShell*** block comment after the script.
 Closing that final block comment by patching a ***"#>"*** tail into the compressed image data immediately before ***FF D9***.  
 Keeping all generated ***JPGs*** progressive.  
 Recompressing/resizing the cover image with progressive ***4:4:4*** encoding until any ***"#>"*** byte sequences are removed.  
-Checking local ***JPG*** warnings and retrying when the tail shape looks unsafe.  
+Checking local ***JPG*** warnings and reporting (without re-encoding) when the tail shape looks unsafe.  
 
 The method is inherently dependent on ***X-Twitter*** preserving a small patched tail.  
 The default and ***"-alt"*** option tails are both workarounds for that black-box behavior.
