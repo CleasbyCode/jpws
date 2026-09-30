@@ -1,11 +1,12 @@
 # jpws
 
-Embed a ***PowerShell*** script within a ***JPG*** image to create a tweetable ***JPG-PowerShell*** polyglot file.
+Embed a ***PowerShell*** script within a ***JPG*** image to create a postable ***JPG-PowerShell*** polyglot file.
 
 ![Demo Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/jpws_27965.jpg)
-***Credits:
-{Image "Rainbow Dragon" [Duncan Crombie / @theartofweb](https://x.com/theartofweb)
-PowerShell "text-sine.ps1" [Darren Shaw / @gierrofo](https://x.com/gierrofo)}***
+
+**Credits:**
+* Image "Rainbow Dragon" — [Duncan Crombie / @theartofweb](https://x.com/theartofweb)
+* PowerShell "text-sine.ps1" — [Darren Shaw / @gierrofo](https://x.com/gierrofo)
 
 ## Usage (***Linux***)
 
@@ -23,7 +24,7 @@ Usage: jpws [-alt] <cover_image> <pwsh_script>
 
 user1@linuxbox:~/Desktop$ jpws dragon.jpg sinewave.ps1
 
-Saved "PowerShell-embedded" JPG image: jpws_10247.jpg (121098 bytes).
+Saved JPG-PowerShell polyglot image: jpws_10a2f7c934bd1.jpg (121098 bytes).
 
 Complete!
 ```
@@ -59,7 +60,7 @@ That is:
 
   ***XTW\n<#***
 
-The important part is the final ***"3e 23" ("<#")***.
+The important part is the final ***"3C 23" ("<#")***.
 This makes ***PowerShell*** treat the following ***JPG*** header/profile bytes as comment text instead of executable code.
 
 ***X-Twitter*** preserves this early ***JFIF*** area.
@@ -123,7 +124,7 @@ extra bytes after the close marker survive, they are more likely to be ignored b
 
 ## Cover Image Compatibility
 
-The cover image must not contain any ***"#>" (0x23, 0x3C)*** byte sequence, apart from the ***jpws*** required sequences. If the cover image contains an
+The cover image must not contain any ***"#>" (0x23, 0x3E)*** byte sequence, apart from the ***jpws*** required sequences. If the cover image contains a
 close-comment "#>" sequence, ***PowerShell*** will close the comment too early and then try to execute ***JPG*** bytes and the script will fail.
 
 ***jpws*** checks for these sequences and modifies the cover image when needed.
@@ -135,23 +136,22 @@ The current process is:
 3. Strip/canonicalize leading metadata.
 4. Convert the cover image to progressive ***JPG***.
 5. Replace the leading header with the clean ***JFIF*** layout ***jpws*** expects.
-6. Search the resulting **JPG** bytes for ***"#>"***.
+6. Search the resulting ***JPG*** bytes for ***"#>"***.
 
 If no ***"#>"*** sequence remains, the image can be used.
 
 If the byte sequence ***"#>"*** is still present, ***jpws*** first tries same-dimension recompression.  
 It uses progressive ***4:4:4 JPG*** only, trying these ***DCT*** variants:
 
-  ***4:4:4 default***  
-  ***4:4:4 accurate***  
-  ***4:4:4 fast***
+  ***4:4:4 fast***  
+  ***4:4:4 accurate***
 
-Quality starts at 97 and decreases down to 75.
+Quality starts at 97 and decreases down to 75. At quality 96 and above, only the ***4:4:4 accurate*** variant is used, because ***libjpeg-turbo*** uses accurate ***DCT*** at those high quality levels even when fast ***DCT*** is requested.
 
 If same-dimension recompression still cannot remove the ***"#>"*** byte sequences, ***jpws*** tries resizing.    
 
-Each resize attempt reduces both width and height by one more pixel, up to 300 attempts.  
-Resize encoding also uses progressive ***4:4:4*** only, with the same default/accurate/fast variants.  
+Each resize attempt reduces the shorter dimension by one more pixel, scaling the other dimension proportionally, up to 300 attempts.  
+Resize encoding also uses progressive ***4:4:4*** only, with the same fast/accurate variants.  
 
 Quality is reduced by 2 every 15 resize attempts.
 
@@ -171,13 +171,13 @@ The warning check is only a local heuristic. It is not a perfect ***X-Twitter***
   ***premature EOF***
   ***fatal JPEG decode errors***
 
-If one of those appears, ***jpws*** retries by generating another progressive ***4:4:4*** cover-image candidate, patching the tail again, and checking warnings again.
+If one of those appears, ***jpws*** prints a warning but still keeps the tail-patched image as-is. It no longer re-encodes the cover image in response to a tail warning: re-encoding was found to reduce ***X-Twitter*** compatibility, because the re-encoded compressed data was less likely to preserve the final ***"#>"*** through ***X-Twitter's*** processing. Once the cover image is comment-block free, it is left untouched.
 
-***jpws*** currently allows:
+***jpws*** treats this warning as expected:
 
   ***premature end of data segment***
 
-That warning is expected for many successful tail-patched images.  
+That warning is normal for many successful tail-patched images.  
 
 Outputs with ***"premature end of data segment"*** have been more likely to survive ***X-Twitter*** than outputs with ***"extraneous bytes before marker 0xD9"***.
 
@@ -205,7 +205,7 @@ Because of this, ***jpws*** cannot currently predict success with certainty. The
 4. Download the expanded image.
 5. Check whether the final ***"#>"*** tail correctly survived and whether the ***PowerShell*** script still runs.
 
-Always click the posted image to fully expand it before saving. Otherwise you may download a resized no payload variant instead of the original-size image.
+Always click the posted image to fully expand it before saving. Otherwise you may download a resized, payload-free variant instead of the original-size image.
 
 ## Default vs -alt
 
@@ -229,14 +229,14 @@ If both fail, the practical options are:
 
 ## Executing Embedded PowerShell Script
 
-The easiest way to download the image from ***X-Twitter*** and run the embedded ***PowerShell*** script, is to use ***wget*** for Linux and ***iwr*** for Windows.
+The easiest way to download the image from ***X-Twitter*** and run the embedded ***PowerShell*** script is to use ***wget*** for Linux and ***iwr*** for Windows.
 **Make sure ***PowerShell*** is installed on your Linux PC.**
 
 You will first need to get the image link address from ***X-Twitter***, after you have posted the image.
 
 Click the image in the post to fully expand it, then ***right-click*** on the image and select "***Copy image address***" from the menu.  
 
-You can then paste the image address as part of the ***wget*** or ***iwr*** command, for example: 
+You can then paste the image address as part of the ***wget*** or ***iwr*** command, for example:
 
 Linux:
 ```console
@@ -250,7 +250,7 @@ iwr -OutFile Game.ps1 "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&na
 
 Alternatively, just manually save/download the image from ***X-Twitter*** (Click image within the post to fully expand it before saving).
 
-To run the script embedded within the image using Linux, just enter the following command within a terminal. 
+To run the script embedded within the image using Linux, just enter the following command within a terminal.
 
 ```console
 $ pwsh your_downloaded_image_name.jpg
@@ -274,10 +274,10 @@ Current limits enforced by the program:
  Script extension: .ps1  
  Script size: maximum about 10 KB  
  
- ***PowerShell*** scripts that use a top "script-level" ***param(...) block*** will ***not work*** when embedded within an image.  
- The param block enforces strict parsing at the start of the script.  
- The only things allowed before the param block are comments or blank lines (and sometimes a #requires statement).  
- Having certain binary bytes before param will break parsing. A param block inside a function, rather than at the top of the script, should work fine.  
+ ***PowerShell*** scripts that use a top "script-level" ***param(...) block*** do ***not work reliably*** when embedded within an image.  
+ Depending on the script, the embedded ***param*** block is either ignored (the script still runs, but its named parameters do not bind) or it stops the script from running at all.  
+ This is because the embedded script runs after a leading ***"cls;"***, so the ***param*** block is no longer the first statement, and only comments or blank lines (and sometimes a #requires statement) are allowed before it.  
+ ***jpws*** detects a leading ***param*** block and prints a warning, but still generates the image. To read runtime switches, use ***$args*** instead, e.g. ***$Music = $args -contains '-Music'***. A ***param*** block inside a function, rather than at the top of the script, is fine.  
   
 Cover image dimensions: at least 400x400 pixels  
 Cover image dimensions: no more than 8192 pixels in either dimension  
@@ -306,5 +306,4 @@ This project makes use of the following third-party libraries:
 
 libjpeg-turbo (see [***LICENSE***](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md) file)
 {This software is based in part on the work of the Independent JPEG Group.}
-##
 
