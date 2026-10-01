@@ -17,18 +17,36 @@ An experimental ***Rust*** port [***jpws-rs***](https://github.com/CleasbyCode/j
 ```console
 
 $ sudo apt install libturbojpeg0-dev libjpeg-dev
+
 $ chmod +x compile_jpws.sh
 $ ./compile_jpws.sh
+
 $ Compilation successful. Executable 'jpws' created.
 $ sudo cp jpws /usr/bin
+
 $ jpws
 
 Usage: jpws [-alt] <cover_image> <pwsh_script>
        jpws --info
 
-$ jpws dragon.jpg sinewave.ps1
+$ jpws dragon.jpg text-sine.ps1
 
-Saved JPG-PowerShell polyglot image: jpws_10a2f7c934bd1.jpg (121098 bytes).
+Checking cover image for comment-block close sequences "#>" (0x23, 0x3E).
+
+Image will be progressively recompressed first; dimensions will only be reduced if needed.
+
+Recompress:-
+
+Chroma:  4:4:4 (fast)
+Quality: 90%
+Width:   900
+Height:  604
+
+Saved JPG-PowerShell polyglot image: jpws_e00c002f41d86.jpg (272720 bytes).
+
+Comment-block close sequences successfully removed from image.
+
+Please check to make sure size & quality of cover image is acceptable.
 
 Complete!
 ```
