@@ -50,7 +50,7 @@ Please check to make sure size & quality of cover image is acceptable.
 
 Complete!
 ```
-https://github.com/user-attachments/assets/f5b87dbf-885e-4cb5-a70c-5879c82f7e20
+https://github.com/user-attachments/assets/a096bc4b-79ab-41e4-af9a-50c5a222aee6
 
 ## How It Works
 
