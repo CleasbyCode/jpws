@@ -299,7 +299,8 @@ $ pwsh matrix_rain.jpg -Music
 ![Demo Image2](https://github.com/CleasbyCode/jpws/blob/main/demo_image/matrix_rain.jpg)  
 
 
-Conway's Game of Life demo image. *(Script arguments <board_width> <board_height> <number_of_steps> <-Sound>*  
+Conway's Game of Life demo image.  
+*(Script arguments <board_width> <board_height> <number_of_steps> <-Sound>*  
 
 ![Demo Image3](https://github.com/CleasbyCode/jpws/blob/main/demo_image/game_of_life.jpg)  
 ```
