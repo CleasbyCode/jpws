@@ -290,7 +290,10 @@ G:\demo> ren your_downloaded_image_name.jpg your_downloaded_image_name.ps1
 G:\demo> Unblock-File your_downloaded_image_name.ps1 
 G:\demo> powershell (or pwsh) -ExecutionPolicy Bypass -File .\your_downloaded_image_name.ps1 <script_arguments>
 ```
-https://github.com/user-attachments/assets/2e49ea69-7e33-4b43-bcba-cb0a9678a4f7
+![Demo Image2](https://github.com/CleasbyCode/jpws/blob/main/demo_image/matrix_rain.jpg)  
+
+
+![Demo Image3](https://github.com/CleasbyCode/jpws/blob/main/demo_image/game_of_life.jpg)  
 
 ## Limits
 
