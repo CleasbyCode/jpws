@@ -291,7 +291,7 @@ G:\demo> Unblock-File your_downloaded_image_name.ps1
 G:\demo> powershell (or pwsh) -ExecutionPolicy Bypass -File .\your_downloaded_image_name.ps1 <script_arguments>
 ```
 
-Matrix Rain demo image. *(Script arguments <-Music>)* (Note: Music does not work on Windows, only Linux).
+Matrix Rain demo image. *(Script arguments: <-Music>)* (Note: Music does not work on Windows, only Linux).
 ```
 $ pwsh matrix_rain.jpg -Music
 ```
@@ -300,7 +300,7 @@ $ pwsh matrix_rain.jpg -Music
 
 
 Conway's Game of Life demo image.  
-*(Script arguments <board_width> <board_height> <number_of_steps> <-Sound>*  
+*(Script arguments: <board_width> <board_height> <number_of_steps> <-Sound>*  
 
 ![Demo Image3](https://github.com/CleasbyCode/jpws/blob/main/demo_image/game_of_life.jpg)  
 ```
