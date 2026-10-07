@@ -290,6 +290,12 @@ G:\demo> ren your_downloaded_image_name.jpg your_downloaded_image_name.ps1
 G:\demo> Unblock-File your_downloaded_image_name.ps1 
 G:\demo> powershell (or pwsh) -ExecutionPolicy Bypass -File .\your_downloaded_image_name.ps1 <script_arguments>
 ```
+
+Matrix Rain demo image.
+```
+$ pwsh matrix_rain.jpg -Music
+```
+
 ![Demo Image2](https://github.com/CleasbyCode/jpws/blob/main/demo_image/matrix_rain.jpg)  
 
 
