@@ -8,6 +8,10 @@ Embed a raw ***PowerShell*** script within a ***JPG*** image to create a tweetab
 * Image "Rainbow Dragon" — [Duncan Crombie / @theartofweb](https://x.com/theartofweb)
 * PowerShell "text-sine.ps1" — [Darren Shaw / @gierrofo](https://x.com/gierrofo)
 
+```console
+$ pwsh dragon.jpg -Music
+```
+
 There is a [***Web edition***](https://cleasbycode.co.uk/jpws/app/) of ***jpws***, which you can use immediately, as a convenient alternative to downloading and compiling the CLI source code.
 
 An experimental ***Rust*** port [***jpws-rs***](https://github.com/CleasbyCode/jpws-rs) is also available for those interested in that language.  
