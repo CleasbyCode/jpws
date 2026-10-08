@@ -1,6 +1,6 @@
 # jpws
 
-Embed a raw ***PowerShell*** script within a ***JPG*** image to create a tweetable ***JPG-PowerShell*** polyglot file.
+Embed a raw ***PowerShell*** script within a ***JPG*** image to create a tweetable & executable ***JPG-PowerShell*** polyglot file.
 
 ![Demo Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/dragon.jpg)
 
