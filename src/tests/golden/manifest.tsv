@@ -1,0 +1,5 @@
+case_id	option	script_rel	golden_rel
+default_hello	.	testdata/scripts/script_hello.ps1	golden/default_hello/polyglot.jpg
+alt_hello	-alt	testdata/scripts/script_hello.ps1	golden/alt_hello/polyglot.jpg
+default_block	.	testdata/scripts/script_block.ps1	golden/default_block/polyglot.jpg
+alt_block	-alt	testdata/scripts/script_block.ps1	golden/alt_block/polyglot.jpg
