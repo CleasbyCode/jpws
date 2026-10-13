@@ -5,8 +5,8 @@ A simple Linux tool used to embed a raw ***PowerShell*** script within a ***JPG*
 ![Demo Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/dragon.jpg)
 
 **Credits:**
-* Image "Rainbow Dragon" — [Duncan Crombie / @theartofweb](https://x.com/theartofweb)
-* PowerShell "text-sine.ps1" — [Darren Shaw / @gierrofo](https://x.com/gierrofo)
+* Image "*Rainbow Dragon*" — [Duncan Crombie / @theartofweb](https://x.com/theartofweb)
+* PowerShell "*text-sine.ps1*" — [Darren Shaw / @gierrofo](https://x.com/gierrofo)
 
 ```console
 $ pwsh dragon.jpg -Music
