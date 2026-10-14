@@ -52,7 +52,9 @@ Please check to make sure size & quality of cover image is acceptable.
 
 Complete!
 ```
-https://github.com/user-attachments/assets/a096bc4b-79ab-41e4-af9a-50c5a222aee6
+https://github.com/user-attachments/assets/a096bc4b-79ab-41e4-af9a-50c5a222aee6  
+
+https://github.com/user-attachments/assets/16652459-fa31-4247-833e-0d8516fdd400
 
 ## How It Works
 
