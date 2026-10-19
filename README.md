@@ -1,362 +1,296 @@
 # jpws
 
-A simple Linux CLI tool used to embed a raw ***PowerShell*** script within a ***JPG*** image to create a tweetable & executable ***JPG-PowerShell*** polyglot file.
+A Linux CLI tool that embeds a PowerShell script in a JPG image, creating a JPG–PowerShell polyglot intended for sharing on X/Twitter. The file can be displayed as an image and run as a script. Survival through X/Twitter's image processing must be checked after downloading it again.
 
-![Demo Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/dragon.jpg)
+![Rainbow Dragon demo](https://github.com/CleasbyCode/jpws/blob/main/demo_image/dragon.jpg)
 
-**Credits:** ***Image*** - "*Rainbow Dragon*" [***Duncan Crombie***](https://x.com/theartofweb) / ***PowerShell Script*** - "*text-sine.ps1*" [***Darren Shaw***](https://x.com/gierrofo)
+**Credits:** “Rainbow Dragon” image by [Duncan Crombie](https://x.com/theartofweb); original `text-sine.ps1` script by [Darren Shaw](https://x.com/gierrofo).
 
-```console
-$ pwsh dragon.jpg -Music
+```sh
+pwsh ./dragon.jpg -Music
 ```
 
-There is a [***Web edition***](https://cleasbycode.co.uk/jpws/app/) of ***jpws***, which you can use immediately, as a convenient alternative to downloading and compiling the CLI source code.
+Related projects: [Web edition](https://cleasbycode.co.uk/jpws/app/) and experimental [Rust port, jpws-rs](https://github.com/CleasbyCode/jpws-rs).
 
-An experimental ***Rust*** port [***jpws-rs***](https://github.com/CleasbyCode/jpws-rs) is also available for those interested in that language.  
+## Build on Linux
 
-## Usage (***Linux***)
+Requirements:
 
-```console
+- Bash and GCC 14 or newer, including its C++ standard library. The supplied build script invokes `g++` and uses C++23.
+- TurboJPEG and libjpeg development packages.
+- PowerShell 7 (`pwsh`) to run embedded scripts. PowerShell is not required to build or run the `jpws` encoder.
 
-$ sudo apt install libturbojpeg0-dev libjpeg-dev
+On Debian/Ubuntu systems whose repositories provide GCC 14 or newer:
 
-$ chmod +x compile_jpws.sh
-$ ./compile_jpws.sh
+```sh
+sudo apt install g++ libturbojpeg0-dev libjpeg-dev
+```
 
-$ Compilation successful. Executable 'jpws' created.
-$ sudo cp jpws /usr/bin
+Check `g++ --version` before building. Installing these packages on a distribution with an older default compiler does not satisfy the compiler requirement.
 
-$ jpws
+Run these commands from this `src` directory:
 
-Usage: jpws [-alt] <cover_image> <pwsh_script>
-       jpws --info
+```sh
+g++ --version
+bash compile_jpws.sh
+```
 
-$ jpws dragon.jpg text-sine.ps1
+Successful build output:
 
-Checking cover image for comment-block close sequences "#>" (0x23, 0x3E).
+```text
+Compilation successful. Executable 'jpws' created.
+```
 
-Image will be progressively recompressed first; dimensions will only be reduced if needed.
+Use `./jpws` directly, or optionally install it on your PATH:
 
-Recompress:-
+```sh
+sudo install -m 755 jpws /usr/local/bin/jpws
+```
 
-Chroma:  4:4:4 (fast)
+For a build optimized for the machine doing the compilation:
+
+```sh
+JPWS_NATIVE=1 bash compile_jpws.sh
+```
+
+This enables `-march=native` and, where available, the resize library's FMA path. Use the default build when the executable needs to run on other CPUs.
+
+## Usage
+
+```text
+jpws [-alt] <cover_image> <pwsh_script>
+jpws --info
+```
+
+For example, from `src`, with your cover saved as `cover.jpg`:
+
+```sh
+./jpws cover.jpg pwsh_scripts/text-sine.ps1
+./jpws --info
+```
+
+The output is a new `jpws_<random-suffix>.jpg` in the current working directory. Input files are not overwritten. Output files are created with owner-only read/write permissions, subject to the process umask.
+
+An example progress block is:
+
+```text
+Image Status: Recompress
+
+Chroma Subsampling [4:4:4] Mode: Fast
+
 Quality: 90%
-Width:   900
-Height:  604
 
-Saved JPG-PowerShell polyglot image: jpws_e00c002f41d86.jpg (272720 bytes).
-
-Comment-block close sequences successfully removed from image.
-
-Please check to make sure size & quality of cover image is acceptable.
-
-Complete!
+Dimensions: 900x604
 ```
+
+`Image Status` changes to `Resize` when dimensions are being reduced. On a terminal, the block updates in place; redirected output contains occasional plain-text blocks without terminal control sequences. Dimensions, quality, filename, and output size depend on the input.
+
+On success, the program reports the saved filename and byte count. Inspect the resulting image before posting it.
+
+Demo videos:
 
 https://github.com/user-attachments/assets/cd8521b9-154b-4b30-aa78-6aa65f7228a1
 
 https://github.com/user-attachments/assets/16652459-fa31-4247-833e-0d8516fdd400
 
-## How It Works
-
-*Note: When downloading images from ***X-Twitter***, always click the image in the post to ***FULLY EXPAND*** it before saving. This ensures you get the original size image with the embedded payload.*
-
-***jpws*** creates a ***JPG-PowerShell*** polyglot: the same file is still a displayable ***JPG*** image, but ***PowerShell*** can also parse it as a script.
-The trick is ***PowerShell*** block comments. ***PowerShell*** ignores everything between:
-
-  ***<#***
-
-and:
-
-  ***#>***
-
-***JPG*** decoders ignore or tolerate the non-image data that ***jpws*** uses for the ***PowerShell*** payload.  
-
-The ***PowerShell*** script works only if the comment boundaries survive the round trip through ***X-Twitter***.
-
-## High-Level Layout  
-
-(1) Opening ***PowerShell*** comment block
-
-***jpws*** writes an opening ***"<#"*** sequence into the ***JFIF APP0*** area near the beginning of the file.
-The current bytes written at the ***JFIF*** comment-block location are:
-
-  ***58 54 57 0A 3C 23***
-
-That is:
-
-  ***XTW\n<#***
-
-The important part is the final ***"3C 23" ("<#")***.
-This makes ***PowerShell*** treat the following ***JPG*** header/profile bytes as comment text instead of executable code.
-
-***X-Twitter*** preserves this early ***JFIF*** area.
-
-![JFIF Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/first_block.png)  
-
-(2) ***PowerShell*** script inside the ***APP2/ICC*** profile
-
-The ***PowerShell*** payload is inserted into an ***APP2 ICC*** profile segment.  
-***X-Twitter*** preserves this first ***APP2/ICC*** segment, including the embedded script.
-
-The profile template contains a close-comment sequence before the script:
-
-  ***#>cls;***
-
-That closes the initial block comment and begins executable ***PowerShell***.  
-The user's script is inserted after that.
-
-After the script, the profile template opens another block comment:
-
-  ***<#***
-
-That comments out the rest of the ***JPG*** bytes until ***jpws*** supplies the final close-comment sequence near the end of the file.  
-
-(3) Final close-comment tail
-
-***PowerShell*** requires the final block comment to be closed. Therefore ***jpws*** must place a final "#>" near the end of the ***JPG***.
-
-This is the fragile part.
-
-***jpws*** currently overwrites the last 10 bytes of compressed image data before the ***JPG*** EOI marker (FF D9).  
-
-It does not insert an extra ***JPG*** marker segment for the tail, because ***X-Twitter*** strips post-scan ***COM*** segments and a second post-scan ***APP2/ICC-style*** segment.
-
-The default tail bytes are currently:
-
-  ***9E 23 3E 0D 23 00 00 20 20 00***
-
-The ***"-alt"*** option tail bytes are currently:
-
-  ***00 20 20 00 00 23 3E 0D 23 9E***
-
-These byte strings are written immediately before:
-
-  ***FF D9***
-
-The important bytes are:
-
-  ***23 3E***
-
-which is ***"#>"***.
-
-The following:
-
-  ***0D 23***
-
-is intentional. It starts a new line and then a ***PowerShell*** line comment, so if
-extra bytes after the close marker survive, they are more likely to be ignored by ***PowerShell***.
-
-![BEFORE Image](https://github.com/CleasbyCode/jpws/blob/main/demo_image/before_tweet.png)
-
-## Cover Image Compatibility
-
-The cover image must not contain any ***"#>" (0x23, 0x3E)*** byte sequence, apart from the ***jpws*** required sequences.  
-
-If the cover image contains a close-comment "#>" sequence, ***PowerShell*** will close the comment too early and then try to execute ***JPG*** bytes and the script will fail.
-
-***jpws*** checks for these sequences and modifies the cover image when needed.
-
-The current process is:
-
-1. Validate the input ***JPG***.
-2. Apply ***EXIF*** orientation if needed.
-3. Strip/canonicalize leading metadata.
-4. Convert the cover image to progressive ***JPG***.
-5. Replace the leading header with the clean ***JFIF*** layout ***jpws*** expects.
-6. Search the resulting ***JPG*** bytes for ***"#>"***.
-
-If no ***"#>"*** sequence remains, the image can be used.
-
-If the byte sequence ***"#>"*** is still present, ***jpws*** first tries same-dimension recompression.  
-It uses progressive ***4:4:4 JPG*** only, trying these ***DCT*** variants:
-
-  ***4:4:4 fast***  
-  ***4:4:4 accurate***
-
-Quality starts at 97 and decreases down to 75. At quality 96 and above, only the ***4:4:4 accurate*** variant is used, because ***libjpeg-turbo*** uses accurate ***DCT*** at those high quality levels even when fast ***DCT*** is requested.
-
-If same-dimension recompression still cannot remove the ***"#>"*** byte sequences, ***jpws*** tries resizing.    
-
-Each resize attempt reduces the shorter dimension by one more pixel, scaling the other dimension proportionally, up to 300 attempts.  
-Resize encoding also uses progressive ***4:4:4*** only, with the same fast/accurate variants.  
-
-Quality is reduced by 2 every 15 resize attempts.
-
-The image dimensions must stay at least 400x400 pixels.
-
-## Tail Validation
-
-After the cover image is compatible, ***jpws*** patches the final tail bytes and then builds the full polyglot image in memory.
-
-It then asks ***libjpeg*** to decode the full output and records warnings.
-
-The warning check is only a local heuristic. It is not a perfect ***X-Twitter*** simulation.
-
-***jpws*** treats these as unsafe:
-
-  ***extraneous bytes before marker 0xD9***
-  ***premature EOF***
-  ***fatal JPEG decode errors***
-
-If one of those appears, ***jpws*** prints a warning but still keeps the tail-patched image as-is.  
-
-It no longer re-encodes the cover image in response to a tail warning: re-encoding was found to reduce ***X-Twitter*** compatibility, because the re-encoded compressed data was less likely to preserve the final ***"#>"*** through ***X-Twitter's*** processing.  
-
-Once the cover image is comment-block free, it is left untouched.
-
-***jpws*** treats this warning as expected:
-
-  ***premature end of data segment***
-
-That warning is normal for many successful tail-patched images.  
-
-Outputs with ***"premature end of data segment"*** have been more likely to survive ***X-Twitter*** than outputs with ***"extraneous bytes before marker 0xD9"***.
-
-This is not a guarantee. It is just the best local signal found so far.
-
-## What X-Twitter Appears To Do
-
-***X-Twitter's*** exact ***JPG*** processing is not known.
-
-Current observations:
-
-* Progressive ***JPGs*** within size and dimension limits are often not fully re-encoded.
-* The early ***JFIF*** area containing the opening ***"<#"*** is preserved in tests.
-* The first ***APP2/ICC*** profile segment containing the ***PowerShell*** script is preserved in tests.
-* Extra ***COM*** marker segments near the end of the ***JPG*** are stripped.
-* A second ***APP2/ICC-style*** segment near the end was also stripped.
-* ***X-Twitter*** may rewrite or normalize the final compressed entropy bytes near ***EOI***. Often the final ***"#>"*** survives, but sometimes it does not.
-* Some failures modify only the final tail area; other images may be processed differently.
-
-Because of this, ***jpws*** cannot currently predict success with certainty. The only reliable test is still:
-
-1. Create the ***jpws*** output.
-2. Post it to ***X-Twitter***.
-3. Open/expand the posted image.
-4. Download the expanded image.
-5. Check whether the final ***"#>"*** tail correctly survived and whether the ***PowerShell*** script still runs.
-
-Always click the posted image to fully expand it before saving. Otherwise you may download a resized, payload-free variant instead of the original-size image.
-
-## Default vs -alt
-
-Use the default mode first:
-
-  ***$ jpws cover_image.jpg script.ps1***
-
-If the downloaded ***X-Twitter*** image no longer contains a correct / working final tail, try:
-
-  ***$ jpws -alt cover_image.jpg script.ps1***
-
-The two modes place the final ***"#>"*** in different positions within the last 10 bytes before ***EOI***.  
-Some images that fail with one tail layout will work with the other.
-
-If both fail, the practical options are:
-
-  Try a different cover image.  
-  Crop or scale the image externally and run ***jpws*** again.  
-  Re-save the image through an editor, then run ***jpws*** again.  
-  Generate several ***jpws*** outputs and test them through ***X-Twitter***.
-
-## Executing Embedded PowerShell Script
-
-The easiest way to download the image from ***X-Twitter*** and run the embedded ***PowerShell*** script is to use ***wget*** for Linux and ***iwr*** for Windows.
-**Make sure ***PowerShell*** is installed on your Linux PC.**
-
-You will first need to get the image link address from ***X-Twitter***, after you have posted the image.
-
-Click the image in the post to fully expand it, then ***right-click*** on the image and select "***Copy image address***" from the menu.  
-
-You can then paste the image address as part of the ***wget*** or ***iwr*** command, for example:
-
-Linux:
-```console
-$ wget -O game.jpg "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";pwsh game.jpg <script_arguments>
+## Input and output limits
+
+| Item | Enforced limit or requirement |
+| --- | --- |
+| Cover extension | `.jpg`, `.jpeg`, or `.jfif`, case-insensitive |
+| Cover file size | 134–5,242,880 bytes |
+| Completed output size | At most 5 MiB (5,242,880 bytes), including the embedded profile |
+| Cover dimensions | 400–8,192 pixels on each axis |
+| Cover pixel count | At most 25,000,000 pixels |
+| JPEG colour space | YCbCr or grayscale; other colour spaces, including CMYK, are rejected |
+| Script extension | `.ps1`, case-insensitive |
+| Script file size | At most 9,812 bytes, including any UTF-8 BOM |
+| Script payload size | At least 10 bytes after removing any UTF-8 BOM |
+| Input file type | Regular files; symbolic links in the final path component are rejected |
+
+Use UTF-8 scripts, with or without a BOM. A leading UTF-8 BOM is removed before embedding. BOM-marked UTF-16 and UTF-32 files are rejected; the program does not comprehensively validate the remaining text as UTF-8 or check PowerShell syntax.
+
+Spaces and parentheses in filenames are supported; quote those paths in shell commands. Control characters in the filename itself are rejected.
+
+Scripts with a top-level `param(...)` block do not work reliably after embedding because the template puts `cls;` before the script. `jpws` warns when it recognizes a leading `param` block but still generates the image; this is not a full PowerShell parser. Read runtime switches from `$args` instead, for example:
+
+```powershell
+$Music = $args -contains '-Music'
 ```
 
-Windows:
-```console
-G:\demo> iwr -OutFile Game.ps1 "https://pbs.twimg.com/media/GhZTR8BXgAACc9Q?format=jpg&name=medium";.\Game.ps1 <script_arguments>
+A `param` block inside a function is unaffected by this placement restriction. Other script dependencies and compatibility requirements still apply to the machine running the image.
+
+## How it works
+
+PowerShell block comments use `<#` and `#>`. The polyglot places the JPEG bytes inside comments while exposing the embedded script between them. JPEG decoders ignore or tolerate the profile payload and patched tail; local validation checks the final file before it is saved.
+
+### File layout
+
+1. **Opening comment in JFIF APP0.** At byte offset `0x0C`, `jpws` writes `58 54 57 0A 3C 23`, representing `XTW\n<#`. The opening `<#` comments out the following header and profile bytes.
+2. **Script in APP2/ICC.** A profile segment follows the 20-byte JFIF header. Its template contains `#>cls;`, followed by the script, then `\r\n<#\r\n` to comment out the remaining JPEG data.
+3. **Closing comment in the final scan.** Ten bytes of compressed data immediately before the EOI marker (`FF D9`) are replaced with one of the following tails:
+
+| Mode | Tail bytes |
+| --- | --- |
+| Default | `9E 23 3E 0D 23 00 00 20 20 00` |
+| `-alt` | `00 20 20 00 00 23 3E 0D 23 9E` |
+
+`23 3E` is `#>`. The following `0D 23` starts a new line and a PowerShell line comment for the remaining bytes. The tail is placed in scan data because previous upload tests found that extra post-scan COM and APP2-style segments were stripped.
+
+![JFIF layout](https://github.com/CleasbyCode/jpws/blob/main/demo_image/first_block.png)
+
+![Image before upload](https://github.com/CleasbyCode/jpws/blob/main/demo_image/before_tweet.png)
+
+### Cover processing
+
+Every input is canonicalized, even if it initially contains no `#>`:
+
+1. Validate the JPEG header, colour space, dimensions, and pixel count.
+2. Apply EXIF orientation, discard metadata, and produce a progressive JPEG. Where a lossless coefficient transform cannot preserve the complete edges, decode and orient pixels instead.
+3. Replace the leading metadata with the expected clean JFIF header.
+4. Check that the JPEG contains no `#>` and fits the output-size allowance after reserving space for the embedded profile.
+
+If either candidate check fails, try same-dimension progressive 4:4:4 recompression at qualities 97 down to 75. At qualities 97 and 96, only accurate DCT is tried; below that, fast and accurate DCT are tried. This gives up to 44 candidates. The initial coefficient transform can preserve the input's subsampling; not every accepted output is necessarily 4:4:4.
+
+If needed, try up to 300 resized candidates. Attempt `n` reduces the original shorter axis by `n` pixels and scales the other axis proportionally, rounded to the nearest pixel. Each attempt resizes from the retained source pixels rather than the preceding candidate. Quality starts at 97 and decreases by two every 15 attempts. Each resize attempt uses one of the available DCT modes and progressive 4:4:4 encoding. Neither dimension may fall below 400 pixels.
+
+#### Optional processing limit
+
+There is **no default pixel-work budget**: normal runs have the full candidate search available, subject to the attempt and dimension limits above.
+
+For automated processing, an explicit limit can be set:
+
+```sh
+JPWS_MAX_PIXEL_WORK=250000000 ./jpws cover.jpg pwsh_scripts/text-sine.ps1
 ```
 
-Alternatively, just manually save/download the image from ***X-Twitter*** (Click image within the post to fully expand it before saving).
+Each pixel encode charges its pixel count. Each resize additionally charges its source and destination pixel counts. If the configured budget is exhausted, the program exits without saving output. Increase or unset `JPWS_MAX_PIXEL_WORK` to allow more work; `JPWS_MAX_PIXEL_WORK=0` disables this optional limit. This is a limit on repeated encode/resize work, not a wall-clock timeout.
 
-To run the script embedded within the image using Linux, just enter the following command within a terminal.
+### Final validation
 
-```console
-$ pwsh your_downloaded_image_name.jpg <script_arguments>
+Once a candidate is comment-free and fits the size allowance, `jpws` assembles the full output once in memory. Before patching, it checks that all ten tail bytes fit inside the final scan after its last header or restart marker, without splitting a stuffed byte pair.
+
+A cover with insufficient or unsuitable final scan data is rejected. This can happen with otherwise valid JPEGs, including solid-colour images. Try another cover rather than expecting the program to overwrite a scan header.
+
+After patching the tail and JFIF comment bytes, libjpeg decodes the complete output:
+
+- **Fatal decoder errors reject the output. No file is saved.**
+- Recoverable decoder warnings are reported, but the image is retained. These include extraneous data, premature EOF, and other warnings such as a premature end of a data segment.
+
+Recoverable warnings do not trigger another encode. Previous upload experiments found that warning-driven re-encoding could reduce tail survival. Local decoding is not a simulation of X/Twitter, and neither a warning-free decode nor a tolerated warning guarantees that an upload will preserve the script.
+
+## Sharing on X/Twitter
+
+The project's upload observations include preservation of the early JFIF comment and first APP2/ICC profile in tested images, removal of extra post-scan metadata segments, and changes to final scan bytes. Some progressive JPEGs were not fully re-encoded. These are observations, not guarantees; the exact platform processing is unknown and may change. No dated upload-test matrix is maintained in this README.
+
+To check a particular result:
+
+1. Generate the output and inspect it locally.
+2. Post it to X/Twitter.
+3. Expand the posted image before saving it or copying its image address.
+4. Obtain the original-size variant where available, rather than a preview or a URL explicitly requesting `name=medium`.
+5. Check the downloaded image, embedded payload, and comment boundaries, then test the intended script on the downloaded file.
+
+Expanding the image helps avoid a preview, but does not prove that the downloaded file is original or that its payload survived. Verify the result after download.
+
+Use the default mode first. If the downloaded tail does not work, try the other layout:
+
+```sh
+./jpws -alt cover.jpg pwsh_scripts/text-sine.ps1
 ```
-For Windows, after downloading the image from ***X-Twitter***, you will need to rename the ***.jpg*** file extension to ***.ps1***, also, depending on the Windows/PowerShell execution policy,
-you will probably need to unblock the file before you can run the embedded script. 
 
-```console
-G:\demo> ren your_downloaded_image_name.jpg your_downloaded_image_name.ps1
-G:\demo> Unblock-File your_downloaded_image_name.ps1 
-G:\demo> powershell (or pwsh) -ExecutionPolicy Bypass -File .\your_downloaded_image_name.ps1 <script_arguments>
+If both modes fail, change the cover, crop or scale it, or re-save it with different compression before trying again. Repeating identical inputs and settings with the same build normally produces identical image bytes; only the random output filename changes. Reposting those bytes may test platform variability, but does not create a new local encoding.
+
+## Downloading and running an embedded script
+
+The examples below use PowerShell 7 (`pwsh`). The CLI tests can check syntax with the locally installed `pwsh`; they do not establish compatibility with every PowerShell release or Windows PowerShell 5.1. See Microsoft's [PowerShell command-line documentation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pwsh) for platform-specific file handling.
+
+Use the address of the intended original-size image obtained through the procedure above. Downloading and execution are separate steps: proceed to execution only after the download succeeds and you have checked the resulting file. Append actual script arguments after the filename when needed; do not type angle-bracket placeholders.
+
+### Linux: Bash and PowerShell 7
+
+Download using `wget` in Bash:
+
+```bash
+read -r -p 'Original-size image URL: ' image_url
+wget -O downloaded.jpg "$image_url"
 ```
 
-Matrix Rain demo image. *(Script arguments: <-Music>)* (Note: Music does not work on Windows, only Linux).
-```
-$ pwsh matrix_rain.jpg -Music
-```
+After a successful download and verification, run it:
 
-![Demo Image2](https://github.com/CleasbyCode/jpws/blob/main/demo_image/matrix_rain.jpg)  
-
-
-Conway's Game of Life demo image.  
-*(Script arguments: <board_width> <board_height> <number_of_steps> <-Sound>*  
-
-![Demo Image3](https://github.com/CleasbyCode/jpws/blob/main/demo_image/game_of_life.jpg)  
-```
-$ pwsh game_of_life.jpg 132 33 500 -Sound
+```sh
+pwsh -File ./downloaded.jpg
 ```
 
-## Limits
+PowerShell on Linux can run this file with its `.jpg` extension. For a script that supports the music switch, append `-Music`.
 
-Current limits enforced by the program:  
+### Windows: PowerShell 7
 
- Cover image extension: .jpg, .jpeg, or .jfif  
- Cover image size: maximum 5 MB  
- Script extension: .ps1  
- Script size: maximum about 10 KB  
- 
- ***PowerShell*** scripts that use a top "script-level" ***param(...) block*** do ***not work reliably*** when embedded within an image.  
- 
- Depending on the script, the embedded ***param*** block is either ignored (the script still runs, but its named parameters do not bind) or it stops the script from running at all.  
- 
- This is because the embedded script runs after a leading ***"cls;"***, so the ***param*** block is no longer the first statement, and only comments or blank lines (and sometimes a #requires statement) are allowed before it.  
- 
- ***jpws*** detects a leading ***param*** block and prints a warning, but still generates the image. To read runtime switches, use ***$args*** instead, e.g. ***$Music = $args -contains '-Music'***.  
- 
- A ***param*** block inside a function, rather than at the top of the script, is fine.  
-  
-Cover image dimensions: at least 400x400 pixels  
-Cover image dimensions: no more than 8192 pixels in either dimension  
-Cover image pixels: no more than 25 megapixels
+Run these commands in a PowerShell session, not Command Prompt. Download directly to a `.ps1` filename:
 
-## Summary
+```powershell
+$imageUrl = Read-Host 'Original-size image URL'
+Invoke-WebRequest -Uri $imageUrl -OutFile .\downloaded.ps1 -ErrorAction Stop
+```
 
-***jpws*** works by:  
+Alternatively, if you saved the file manually as `downloaded.jpg`, rename it:
 
-Opening a ***PowerShell*** block comment near the start of the ***JPG***.  
-Storing the ***PowerShell*** script inside an ***APP2/ICC*** profile segment.  
-Reopening a ***PowerShell*** block comment after the script.  
-Closing that final block comment by patching a ***"#>"*** tail into the compressed image data immediately before ***FF D9***.  
-Keeping all generated ***JPGs*** progressive.  
-Recompressing/resizing the cover image with progressive ***4:4:4*** encoding until any ***"#>"*** byte sequences are removed.  
-Checking local ***JPG*** warnings and reporting (without re-encoding) when the tail shape looks unsafe.  
+```powershell
+Rename-Item -LiteralPath .\downloaded.jpg -NewName downloaded.ps1
+```
 
-The method is inherently dependent on ***X-Twitter*** preserving a small patched tail.  
-The default and ***"-alt"*** option tails are both workarounds for that black-box behavior.
+After a successful download and verification, unblock the file if it carries a downloaded-file mark, then run it:
 
-## Third-Party Libraries
+```powershell
+Unblock-File -LiteralPath .\downloaded.ps1
+pwsh -File .\downloaded.ps1
+```
 
-This project makes use of the following third-party libraries:
+On Windows, `pwsh -File` requires the `.ps1` extension. Execution remains subject to the machine's execution policy; unblocking removes the downloaded-file mark but does not change that policy. Script-specific dependencies may also differ between Linux and Windows.
 
-[stb_image](https://github.com/nothings/stb) by Sean Barrett (“nothings”)
+### Published demos
 
-libjpeg-turbo (see [***LICENSE***](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md) file)  
+These commands describe the published demo images; their embedded scripts may differ from the files in `pwsh_scripts`.
 
-{This software is based in part on the work of the Independent JPEG Group.}
+Matrix Rain (`-Music` enables its Linux music option):
 
+```sh
+pwsh ./matrix_rain.jpg -Music
+```
+
+![Matrix Rain demo](https://github.com/CleasbyCode/jpws/blob/main/demo_image/matrix_rain.jpg)
+
+Conway's Game of Life (arguments: board width, board height, step count, and optional `-Sound`):
+
+```sh
+pwsh ./game_of_life.jpg 132 33 500 -Sound
+```
+
+![Game of Life demo](https://github.com/CleasbyCode/jpws/blob/main/demo_image/game_of_life.jpg)
+
+## Tests
+
+Run from `src`:
+
+```sh
+bash tests/run_unit_tests.sh
+bash tests/run_cli_tests.sh
+bash tests/run_golden_tests.sh
+```
+
+All three suites require the build dependencies and standard Linux shell utilities. The CLI and golden suites also require Python 3; the CLI suite uses `mkfifo` and `timeout`, and the golden suite requires `ffmpeg`. Installing `pwsh` enables the CLI suite's optional PowerShell parser checks; those checks do not execute the embedded scripts.
+
+- Unit tests build with AddressSanitizer and UndefinedBehaviorSanitizer, covering bounds, orientation, profile lengths, optional work limits, and tail safety. If LeakSanitizer is unavailable in the environment, the runner retries with leak detection disabled.
+- CLI tests cover argument/file handling, script-size boundaries, profile layout, and redirected progress output.
+- Golden tests check both stored fixtures and freshly generated outputs using structural checks and independent JPEG decoders.
+
+The scripts build current sources in temporary directories by default. `JPWS` can select a binary for CLI tests, and `JPWS_BIN` can select one for golden integration tests. `bash tests/run_golden_tests.sh --verify-only` checks stored golden fixtures without generating new outputs, but still builds the independent JPEG checker.
+
+These suites test local behaviour; they do not upload images or establish current X/Twitter compatibility.
+
+## Third-party libraries
+
+- [`stb_image_resize2`](https://github.com/nothings/stb), by Jeff Roberts (v2) and Jorge L Rodriguez, from the stb collection. The bundled header is version 2.16; see [the bundled license](stb_image/LICENSE.md).
+- [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo), providing the TurboJPEG and libjpeg APIs; see its [license](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/LICENSE.md).
+
+This software is based in part on the work of the Independent JPEG Group.
